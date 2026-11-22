@@ -13,6 +13,7 @@
     star: '<svg viewBox="0 0 24 24"><path d="M12 2.5l2.9 6.1 6.6.8-4.9 4.6 1.3 6.6L12 17.3 6.1 20.6l1.3-6.6L2.5 9.4l6.6-.8z" fill="#FFD23F" stroke="#B8860B" stroke-width="1.4" stroke-linejoin="round"/></svg>',
     starOff: '<svg viewBox="0 0 24 24"><path d="M12 2.5l2.9 6.1 6.6.8-4.9 4.6 1.3 6.6L12 17.3 6.1 20.6l1.3-6.6L2.5 9.4l6.6-.8z" fill="rgba(0,0,0,.25)" stroke="rgba(255,255,255,.35)" stroke-width="1.4" stroke-linejoin="round"/></svg>',
     lock: '<svg viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2.5" fill="#cfd8dc"/><path d="M8 11V8a4 4 0 0 1 8 0v3" fill="none" stroke="#cfd8dc" stroke-width="2.5"/></svg>',
+    note: '<svg viewBox="0 0 24 24"><path d="M9 17V5l11-2v12" fill="none" stroke="#fff" stroke-width="2" stroke-linejoin="round"/><circle cx="6.5" cy="17.5" r="2.8" fill="#fff"/><circle cx="17.5" cy="15.5" r="2.8" fill="#fff"/></svg>',
     sound: '<svg viewBox="0 0 24 24"><path d="M4 9h4l5-4v14l-5-4H4z" fill="#fff"/><path d="M16 8.5a5 5 0 0 1 0 7M18.5 6a8.5 8.5 0 0 1 0 12" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg>',
     mute: '<svg viewBox="0 0 24 24"><path d="M4 9h4l5-4v14l-5-4H4z" fill="#fff"/><path d="M16 9l5 6M21 9l-5 6" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg>',
     back: '<svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>',
@@ -27,7 +28,7 @@
   function load() { try { var s = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null'); if (s && s.v === 1) return Object.assign({}, JSON.parse(JSON.stringify(defaults)), s); } catch (e) {} return JSON.parse(JSON.stringify(defaults)); }
   function persist() { try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch (e) {} }
   function unlockedLevels() { return Math.min(D.LEVELS.length, save.stars.filter(function (x) { return x > 0; }).length + 1); }
-  Ads.removed = save.removeAds; Sfx.setMuted(save.muted); R.hat = save.hat;
+  Ads.removed = save.removeAds; Sfx.setMuted(save.muted); Sfx.setMusic(save.music !== false); R.hat = save.hat;
 
   // ---------- canvas ----------
   var cv = $('#game'), ctx = cv.getContext('2d'), dpr = 1, W = 0, H = 0;
@@ -125,12 +126,12 @@
     sel = { pad: pi, preview: 0 };
     var html = '<div class="sheet-title">Build a frog<button class="x" data-act="close">\u2715</button></div><div class="cards">';
     D.TOWER_ORDER.forEach(function (k) {
-      var T = D.TOWERS[k], locked = T.unlock > unlockedLevels();
-      html += '<button class="card' + (locked ? ' locked' : '') + '" data-build="' + k + '" data-cost="' + T.cost + '"' + (locked ? ' disabled' : '') + '>' +
+      var T = D.TOWERS[k], locked = T.unlock > unlockedLevels(), bc = E.buildCost(G, k);
+      html += '<button class="card' + (locked ? ' locked' : '') + '" data-build="' + k + '" data-cost="' + bc + '"' + (locked ? ' disabled' : '') + '>' +
         (locked ? '<span class="lockic">' + ICON.lock + '</span><span class="cname">Level ' + T.unlock + '</span>' :
-          '<canvas class="ficon" data-type="' + k + '"></canvas><span class="cname">' + T.name.split(' ')[0] + '</span><span class="cost">' + ic('coin') + T.cost + '</span>') + '</button>';
+          '<canvas class="ficon" data-type="' + k + '"></canvas><span class="cname">' + T.name.split(' ')[0] + '</span><span class="cost' + (bc > T.cost ? ' up' : '') + '">' + ic('coin') + bc + '</span>') + '</button>';
     });
-    html += '</div>';
+    html += '</div><div class="sheet-hint">Each extra copy of the same frog costs a bit more — mix your frogs!</div>';
     showSheet('build', html);
   }
   function openTowerSheet(t) {
@@ -158,7 +159,7 @@
     var b = ev.target.closest('button'); if (!b || !G) return;
     if (b.dataset.act === 'close') return closeSheet();
     if (b.dataset.build) {
-      if (G.coins < D.TOWERS[b.dataset.build].cost) { toast('Not enough coins'); Sfx.play('leak'); return; }
+      if (G.coins < E.buildCost(G, b.dataset.build)) { toast('Not enough coins'); Sfx.play('leak'); return; }
       var t = E.build(G, sel.pad, b.dataset.build);
       if (t) { closeSheet(); if (!save.tut) { save.tut = true; persist(); coach('Great! Now tap <b>Start wave</b>. Tap bugs to swat them!', 4500); } }
     } else if (b.dataset.act === 'upgrade') {
@@ -183,12 +184,13 @@
   function closeModal() { modalOpen = false; $('#modal-root').hidden = true; $('#modal').innerHTML = ''; }
   function openPause() {
     paused = true;
-    var m = modal('<h2>Paused</h2><button class="btn green big" data-a="resume">' + ic('play') + 'Resume</button><button class="btn blue" data-a="restart">Restart level</button><button class="btn blue" data-a="sound">' + (save.muted ? 'Sound: off' : 'Sound: on') + '</button><button class="btn red" data-a="quit">Quit to map</button>');
+    var m = modal('<h2>Paused</h2><button class="btn green big" data-a="resume">' + ic('play') + 'Resume</button><button class="btn blue" data-a="restart">Restart level</button><button class="btn blue" data-a="sound">' + (save.muted ? 'Sound: off' : 'Sound: on') + '</button><button class="btn blue" data-a="music">' + (save.music === false ? 'Music: off' : 'Music: on') + '</button><button class="btn red" data-a="quit">Quit to map</button>');
     m.onclick = function (ev) {
       var a = ev.target.closest('[data-a]'); if (!a) return; a = a.dataset.a;
       if (a === 'resume') { closeModal(); paused = false; }
       if (a === 'restart') { closeModal(); startLevel(G.level); }
       if (a === 'sound') { save.muted = !save.muted; Sfx.setMuted(save.muted); persist(); closeModal(); openPause(); }
+      if (a === 'music') { save.music = save.music === false; Sfx.setMusic(save.music); persist(); closeModal(); openPause(); }
       if (a === 'quit') { closeModal(); paused = false; G = null; showMap(); }
     };
   }
@@ -238,6 +240,7 @@
 
   // mock ad / purchase UI (browser + test mode only)
   Ads.setMockUi(function (kind, info) {
+    if (kind !== 'purchase') Sfx.duck(true);
     return new Promise(function (resolve) {
       var root = $('#ad'), fast = window.__FAST_ADS;
       if (kind === 'purchase') {
@@ -252,7 +255,7 @@
       var c = root.querySelector('canvas'); c.width = 160; c.height = 160; R.drawFrogIcon(c, 'tongue', 'crown');
       var left = secs, iv = setInterval(function () {
         left -= 0.1; var el = $('#adcount'); if (el) el.textContent = Math.max(0, Math.ceil(left));
-        if (left <= 0) { clearInterval(iv); root.hidden = true; resolve(true); }
+        if (left <= 0) { clearInterval(iv); root.hidden = true; Sfx.duck(false); resolve(true); }
       }, fast ? 20 : 100);
     });
   });
@@ -273,7 +276,7 @@
       '<div class="menu"><button class="btn green huge" data-go="map">' + ic('play') + 'Play</button>' +
       '<div class="row"><button class="btn blue" data-go="upgrades">Upgrades</button><button class="btn pink" data-go="shop">Shop</button></div>' +
       (daily ? '<button class="btn gold" data-go="daily">' + ic('gift') + 'Daily gift</button>' : '') + '</div>' +
-      '<div class="foot"><button class="iconbtn" data-go="sound">' + (save.muted ? ICON.mute : ICON.sound) + '</button><span>\u00A9 2026 Jonidge \u00B7 jonidge@yahoo.com</span></div>';
+      '<div class="foot"><button class="iconbtn" data-go="sound" aria-label="Sound">' + (save.muted ? ICON.mute : ICON.sound) + '</button><button class="iconbtn' + (save.music === false ? ' off' : '') + '" data-go="music" aria-label="Music">' + ICON.note + '</button><span>\u00A9 2026 Jonidge \u00B7 jonidge@yahoo.com</span></div>';
     show('title'); drawIcons('#scr-title');
   }
   function showMap() {
@@ -351,6 +354,7 @@
     else if (go === 'shop') { backTo = screen; showShop(); }
     else if (go === 'back') { if (backTo === 'title') showTitle(); else showMap(); }
     else if (go === 'sound') { save.muted = !save.muted; Sfx.setMuted(save.muted); persist(); showTitle(); }
+    else if (go === 'music') { save.music = save.music === false; Sfx.setMusic(save.music); persist(); showTitle(); }
     else if (go === 'daily') { save.daily = new Date().toISOString().slice(0, 10); save.flies += 30; save.pearls += 3; persist(); toast('Daily gift: +30 flies, +3 pearls!'); Sfx.play('upgrade'); showTitle(); }
     else if (b.dataset.level != null) startLevel(+b.dataset.level);
     else if (b.dataset.up) {
@@ -387,6 +391,8 @@
 
   var toastT = null;
   function toast(msg) { var t = $('#toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toastT); toastT = setTimeout(function () { t.classList.remove('show'); }, 1800); }
+  // mobile-safe audio unlock: the first touch/click/key anywhere starts the audio context (and music)
+  ['pointerdown', 'touchend', 'click', 'keydown'].forEach(function (evn) { document.addEventListener(evn, function () { Sfx.unlock(); }, { capture: true, passive: true }); });
   document.addEventListener('visibilitychange', function () { if (document.hidden && G && screen === 'game' && !modalOpen) openPause(); });
 
   showTitle();

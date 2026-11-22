@@ -64,7 +64,7 @@
     var L = D.LEVELS[levelIndex], pads = computePads(L.path);
     var s = {
       level: levelIndex, L: L, path: buildPath(L.path), pads: pads.pads, pathSet: pads.pathSet,
-      coins: 120 + levelIndex * 15 + (meta.coins || 0) * 15,
+      coins: 140 + levelIndex * 20 + (meta.coins || 0) * 15,
       lives: 20 + (meta.lives || 0) * 2, maxLives: 20 + (meta.lives || 0) * 2,
       dmgMul: 1 + (meta.power || 0) * 0.06, chorusMul: 1 + (meta.chorus || 0) * 0.2,
       hpMul: (1 + levelIndex * 0.11) * (L.hp || 1),
@@ -103,7 +103,7 @@
     if (e.hp <= 0) return;
     opts = opts || {};
     var a = opts.pierce ? 0 : (e.E.armor || 0);
-    var dmg = Math.max(1, amt * (opts.raw ? 1 : s.dmgMul) - a);
+    var dmg = Math.max(1, (amt - a) * (opts.raw ? 1 : s.dmgMul));
     e.hp -= dmg; e.hitT = 0.12;
     if (e.hp <= 0) {
       s.coins += e.E.reward; s.earned += e.E.reward; s.kills++;
@@ -137,11 +137,19 @@
   }
 
   function towerStats(t) { return D.TOWERS[t.type].lv[t.lvl]; }
+  // Crowding: each copy of the same frog already on the pond makes the next one 15% (of base) pricier,
+  // so spamming one frog type gets expensive and mixed defenses stay the efficient choice.
+  var CROWD = 0.15;
+  function countType(s, type) { var n = 0; for (var i = 0; i < s.towers.length; i++) if (s.towers[i].type === type) n++; return n; }
+  function buildCost(s, type) {
+    var base = D.TOWERS[type].cost, n = countType(s, type);
+    return n ? Math.round(base * (1 + CROWD * n) / 5) * 5 : base;
+  }
   function build(s, padIdx, type) {
-    var pad = s.pads[padIdx], T = D.TOWERS[type];
-    if (!pad || pad.tower || s.coins < T.cost) return null;
-    var t = { id: s.nextId++, type: type, lvl: 0, x: pad.x, y: pad.y, pad: padIdx, cd: 0.2, spent: T.cost, aim: Math.PI / 2, anim: 0, stun: 0, eco: 0 };
-    s.coins -= T.cost; pad.tower = t; s.towers.push(t);
+    var pad = s.pads[padIdx], cost = buildCost(s, type);
+    if (!pad || pad.tower || s.coins < cost) return null;
+    var t = { id: s.nextId++, type: type, lvl: 0, x: pad.x, y: pad.y, pad: padIdx, cd: 0.2, spent: cost, aim: Math.PI / 2, anim: 0, stun: 0, eco: 0 };
+    s.coins -= cost; pad.tower = t; s.towers.push(t);
     ev(s, { t: 'build', x: t.x, y: t.y, type: type });
     return t;
   }
@@ -217,7 +225,7 @@
         if (!nx) break; hit.push(nx); cur = nx;
       }
       var pts = [{ x: t.x, y: t.y - 0.1 }];
-      hit.forEach(function (h, i) { damage(s, h, st.dmg * Math.pow(0.85, i)); pts.push({ x: h.x, y: h.y }); });
+      hit.forEach(function (h, i) { damage(s, h, st.dmg * Math.pow(0.8, i)); pts.push({ x: h.x, y: h.y }); });
       s.fx.push({ k: 'zap', pts: pts, life: 0.18, max: 0.18 });
     } else {
       s.projectiles.push({ type: t.type, x: t.x, y: t.y, sx: t.x, sy: t.y, tx: e.x, ty: e.y, target: e, st: st,
@@ -291,7 +299,7 @@
     }
   }
 
-  var Engine = { create: create, step: step, build: build, upgrade: upgrade, upgradeCost: upgradeCost, sell: sell, sellValue: sellValue,
+  var Engine = { create: create, step: step, build: build, buildCost: buildCost, upgrade: upgrade, upgradeCost: upgradeCost, sell: sell, sellValue: sellValue,
     sendWave: sendWave, canSendWave: canSendWave, chorus: chorus, tap: tap, revive: revive, towerStats: towerStats, pathPos: pathPos };
   root.Engine = Engine;
   if (typeof module !== 'undefined') module.exports = Engine;

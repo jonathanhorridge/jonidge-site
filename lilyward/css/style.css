@@ -58,6 +58,7 @@ h1,h2,h3{font-family:"Lilita One","Fredoka",sans-serif;font-weight:400;margin:0;
 .btn.big{min-height:58px;font-size:23px}.btn.huge{min-height:70px;font-size:30px;border-radius:22px}.btn.small{min-height:40px;font-size:16px}
 .iconbtn{width:44px;height:44px;border-radius:14px;background:rgba(8,50,58,.55);display:flex;align-items:center;justify-content:center;box-shadow:inset 0 -3px 0 rgba(0,0,0,.25)}
 .iconbtn svg{width:24px;height:24px}
+.iconbtn.off{opacity:.45}
 .row{display:flex;gap:12px;width:100%}
 .small{font-size:14px;opacity:.85}.center{text-align:center}
 /* HUD */
@@ -92,6 +93,8 @@ h1,h2,h3{font-family:"Lilita One","Fredoka",sans-serif;font-weight:400;margin:0;
 .card.poor{opacity:.5}.card.locked{background:#EFE7D6;box-shadow:none;opacity:.7}
 .card .cname{font-weight:700;font-size:14px}
 .card .cost{font-family:"Lilita One";font-size:17px;color:#A86A00}
+.card .cost.up{color:#C2410C}
+.sheet-hint{margin-top:8px;font-size:12.5px;color:#7A6A4A;text-align:center}
 .lockic svg{width:30px;height:30px}.lockic svg rect,.lockic svg path{fill:#B9AE97;stroke:#B9AE97}
 canvas.ficon{width:52px;height:52px}canvas.ficon.sm{width:36px;height:36px}canvas.ficon.hero{width:150px;height:150px}canvas.ficon.big{width:80px;height:80px}
 .stats{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}

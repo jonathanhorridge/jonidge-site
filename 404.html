@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Page not found — Jonidge</title>
+  <meta name="robots" content="noindex">
+  <meta name="theme-color" content="#F3EEE4">
+  <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/css/styles.css" id="sheet">
+  <style>
+    body { margin:0; font-family: Geist, ui-sans-serif, system-ui, sans-serif; background:#f3eee4; color:#1a1612; }
+    .error-page { text-align:center; padding:6rem 1.25rem 5rem; }
+    h1 { margin:0 0 .5rem; font-size:2.4rem; letter-spacing:-0.04em; }
+    a { color:#c85a14; }
+  </style>
+</head>
+<body>
+  <main class="error-page">
+    <h1>This page isn’t here.</h1>
+    <p><a id="home" href="/">Back to Jonidge</a></p>
+  </main>
+  <script>
+    (function () {
+      var project = location.hostname.endsWith("github.io");
+      var base = project ? "/jonidge-site/" : "/";
+      var home = document.getElementById("home");
+      if (home) home.setAttribute("href", base);
+      var sheet = document.getElementById("sheet");
+      if (sheet) sheet.href = base + "css/styles.css";
+      var icon = document.querySelector('link[rel="icon"]');
+      if (icon) icon.href = base + "assets/favicon.svg";
+    })();
+  </script>
+</body>
+</html>

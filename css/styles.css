@@ -1,4 +1,4 @@
-/* Jonidge studio site — warm paper, ink, and a little sun. */
+/* Jonidge studio site — off-white, ink, and a restrained slate accent. */
 @font-face {
   font-family: Geist;
   src: url("../fonts/geist-latin.woff2") format("woff2");
@@ -8,18 +8,18 @@
 }
 
 :root {
-  --bg: #f3eee4;
-  --bg-deep: #e8e0d2;
-  --paper: #fffbf5;
-  --ink: #1a1612;
-  --ink-soft: #5e574e;
-  --line: #e4dcd0;
-  --accent: #c85a14;
-  --accent-hover: #a34810;
+  --bg: #f6f6f4;
+  --bg-deep: #ecece9;
+  --paper: #ffffff;
+  --ink: #161615;
+  --ink-soft: #5c5b58;
+  --line: #e3e3df;
+  --accent: #3d4a5c;
+  --accent-hover: #2a3340;
   --sun: #f3b53a;
   --sun-deep: #d2651a;
   --radius: 1.15rem;
-  --shadow: 0 1px 2px rgba(26, 22, 18, 0.05), 0 12px 32px rgba(26, 22, 18, 0.06);
+  --shadow: 0 1px 2px rgba(22, 22, 21, 0.04), 0 12px 32px rgba(22, 22, 21, 0.06);
   --max: 68rem;
   --header-h: 4.25rem;
   --ease: cubic-bezier(0.22, 1, 0.36, 1);
@@ -47,8 +47,8 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   background:
-    radial-gradient(900px 480px at 8% -8%, rgba(243, 181, 58, 0.16), transparent 60%),
-    radial-gradient(720px 420px at 100% 0%, rgba(200, 90, 20, 0.07), transparent 55%),
+    radial-gradient(900px 480px at 8% -8%, rgba(22, 22, 21, 0.03), transparent 60%),
+    radial-gradient(720px 420px at 100% 0%, rgba(61, 74, 92, 0.05), transparent 55%),
     var(--bg);
 }
 
@@ -58,7 +58,7 @@ a:hover { color: var(--accent-hover); }
 a:focus-visible,
 button:focus-visible,
 video:focus-visible {
-  outline: 2px solid var(--sun-deep);
+  outline: 2px solid var(--accent);
   outline-offset: 3px;
   border-radius: 4px;
 }
@@ -198,7 +198,7 @@ video:focus-visible {
 .app-card:hover {
   color: inherit;
   transform: translateY(-2px);
-  box-shadow: 0 2px 4px rgba(26, 22, 18, 0.05), 0 18px 40px rgba(26, 22, 18, 0.09);
+  box-shadow: 0 2px 4px rgba(22, 22, 21, 0.05), 0 18px 40px rgba(22, 22, 21, 0.09);
 }
 .app-card .icon {
   width: 5.5rem;
@@ -241,17 +241,26 @@ video:focus-visible {
   gap: 0.4rem;
   padding: 0.22rem 0.65rem;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--sun) 28%, var(--paper));
-  color: #7a3d08;
+  background: var(--bg-deep);
+  color: var(--ink-soft);
   font-weight: 600;
   font-size: 0.78rem;
   letter-spacing: 0.02em;
+  white-space: nowrap;
 }
 .pill::before {
   content: "";
   width: 0.4rem;
   height: 0.4rem;
   border-radius: 50%;
+  background: var(--accent);
+}
+/* Sunplop brand colors stay on the game card (and optionally the game page). */
+.app-card-sunplop .pill {
+  background: color-mix(in srgb, var(--sun) 28%, var(--paper));
+  color: #7a3d08;
+}
+.app-card-sunplop .pill::before {
   background: var(--sun-deep);
 }
 .app-card .more {
@@ -271,10 +280,11 @@ video:focus-visible {
   color: var(--ink-soft);
 }
 .site-footer .wrap {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 1.5rem 2rem;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
   align-items: start;
+  gap: 1.5rem 2rem;
 }
 .site-footer .brand .name { font-size: 1.1rem; }
 .footer-contact {
@@ -289,12 +299,21 @@ video:focus-visible {
   margin-bottom: 0.35rem;
 }
 .footer-contact a:hover { color: var(--accent); }
-.footer-contact address {
-  font-style: normal;
-  margin: 0;
+.footer-links {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.35rem 0.95rem;
+  margin: 0.15rem 0 0;
+  font-size: 0.88rem;
+}
+.footer-links a {
+  color: var(--ink-soft);
+  font-weight: 520;
+  margin-bottom: 0;
 }
 .copyright {
-  grid-column: 1 / -1;
+  flex: 1 0 100%;
   margin: 0.4rem 0 0;
   font-size: 0.82rem;
   color: color-mix(in srgb, var(--ink-soft) 80%, var(--bg));
@@ -372,7 +391,7 @@ video:focus-visible {
 .preview-video video {
   width: 100%;
   border-radius: 1.25rem;
-  background: #1a1612;
+  background: #161615;
   box-shadow: var(--shadow);
 }
 .preview-video figcaption {
@@ -392,7 +411,7 @@ video:focus-visible {
 .gallery video {
   width: 100%;
   border-radius: 1rem;
-  background: #1a1612;
+  background: #161615;
   box-shadow: var(--shadow);
 }
 .gallery figcaption {
@@ -421,7 +440,16 @@ video:focus-visible {
   padding-left: 1.2rem;
 }
 .prose li { margin: 0.25rem 0; }
-.prose li::marker { color: var(--sun-deep); }
+.prose li::marker { color: var(--accent); }
+.page-sunplop .prose li::marker { color: var(--sun-deep); }
+.page-sunplop .coming-soon {
+  border-color: #e8d7b4;
+  background: #fbf6ec;
+}
+.page-sunplop .coming-soon {
+  border-color: color-mix(in srgb, var(--sun) 40%, var(--line));
+  background: color-mix(in srgb, var(--sun) 11%, var(--paper));
+}
 
 .legal-links {
   margin: 0 0 4rem;
@@ -443,7 +471,7 @@ video:focus-visible {
   flex-wrap: wrap;
   gap: 0.45rem 1.15rem;
 }
-.legal-links a { font-weight: 540; }
+.legal-links a { font-weight: 540; white-space: nowrap; }
 
 /* ----- Legal pages ----- */
 .legal-main {
@@ -477,7 +505,7 @@ video:focus-visible {
   font-weight: 670;
   letter-spacing: -0.035em;
   line-height: 1.15;
-  color: var(--sun-deep);
+  color: var(--ink);
 }
 .legal-main h2 {
   margin: 1.8rem 0 0.55rem;
@@ -557,7 +585,8 @@ video:focus-visible {
   }
   .site-footer .wrap,
   .footer-contact { text-align: left; }
-  .site-footer .wrap { grid-template-columns: 1fr; }
+  .footer-contact { width: 100%; }
+  .footer-links { justify-content: flex-start; }
   .legal-main { width: min(46rem, calc(100% - 1.6rem)); }
 }
 @media (prefers-reduced-motion: reduce) {

@@ -34,5 +34,3 @@ Once DNS is live, enable “Enforce HTTPS” in the Pages settings if it is not 
 ## Contact
 
 jonidge@yahoo.com
-
-Rue du Jura 4, 1043 Sugnens, Switzerland

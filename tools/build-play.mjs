@@ -78,6 +78,7 @@ const sources = [
   { slug: "ferry-jam", from: "/workspace/ferry-jam/www" },
   { slug: "fin-to-feather", from: "/workspace/ftf-web/fin-to-feather" },
   { slug: "lilyward", from: "/workspace/tower-defense/www" },
+  { slug: "clawcastle", from: "/workspace/clawcastle/www" },
   { slug: "radar-bite", from: "/workspace/radarbite/dist-jonidge" }
 ];
 

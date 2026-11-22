@@ -51,6 +51,14 @@
       "notes": []
     },
     {
+      "name": "Clawcastle",
+      "slug": "clawcastle",
+      "kind": "game",
+      "blurb": "Match beach treasures to send your crab army up that column, then topple rival sandcastles that fire back. Tactical match-3 meets base building.",
+      "icon": "/play/clawcastle/assets/img/icon-192.png",
+      "notes": []
+    },
+    {
       "name": "Radar Bite",
       "slug": "radar-bite",
       "kind": "app",

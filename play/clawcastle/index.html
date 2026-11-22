@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+<!-- jonidge-play-gate -->
+<meta name="robots" content="noindex,nofollow">
+<style id="jonidge-gate-css">html{visibility:hidden!important}</style>
+<script>
+(function(){
+  try {
+    var t = localStorage.getItem("jonidge-play-v1") || "";
+    if (!/^v1\.[0-9a-f]{128}$/i.test(t)) {
+      location.replace("/play/");
+      return;
+    }
+    var s = document.getElementById("jonidge-gate-css");
+    if (s) s.remove();
+  } catch (e) {
+    location.replace("/play/");
+  }
+})();
+</script>
+
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#2EC4E6">
+<meta name="description" content="Clawcastle: match beach treasures to send your crab army against rival sandcastles. A tactical match-3 by Jonidge.">
+<title>Clawcastle</title>
+<link rel="icon" href="assets/img/icon-192.png" type="image/png">
+<link rel="apple-touch-icon" href="assets/img/icon-192.png">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="preload" href="assets/fonts/LilitaOne-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<canvas id="game"></canvas>
+<header id="hud" hidden>
+  <button id="h-pause" class="iconbtn" aria-label="Pause"><svg viewBox="0 0 24 24"><rect x="6" y="5" width="4" height="14" rx="1.5" fill="#fff"/><rect x="14" y="5" width="4" height="14" rx="1.5" fill="#fff"/></svg></button>
+  <div class="hud-mid"><span id="h-level">Raid 1</span><b id="h-name">First Pinch</b></div>
+  <div class="chip moves" id="h-moves-chip"><span>Moves</span><b id="h-moves">12</b></div>
+</header>
+<div id="coach" hidden></div>
+<section id="scr-title" class="screen">
+  <div class="title-wrap">
+    <div class="logo"><span class="l1">Claw</span><span class="l2">castle</span></div>
+    <p class="tagline">Match the beach. Rally the crabs. Storm the sandcastle!</p>
+    <button class="btn big orange" data-go="map">Raid!</button>
+    <button class="btn blue" data-go="base">Home Beach</button>
+    <div class="title-row">
+      <button class="btn small ghost" id="t-sound" aria-label="Sound">Sound: on</button>
+      <button class="btn small ghost" id="t-music" aria-label="Music">Music: on</button>
+    </div>
+    <p class="credit">A Jonidge game &middot; prototype</p>
+  </div>
+</section>
+<section id="scr-map" class="screen" hidden>
+  <div class="topbar">
+    <button class="iconbtn" data-go="title" aria-label="Back"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7" stroke="#fff" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+    <div class="wallet"><span class="chip sand"><i class="ico-sand"></i><b class="w-sand">0</b></span><span class="chip pearls"><i class="ico-pearl"></i><b class="w-pearls">0</b></span></div>
+    <button class="btn small blue" data-go="base">Home Beach</button>
+  </div>
+  <div class="map-scroll" id="map-scroll"><div class="map-inner" id="map-inner"></div></div>
+</section>
+<section id="scr-base" class="screen" hidden>
+  <div class="topbar">
+    <button class="iconbtn" data-go="back" aria-label="Back"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7" stroke="#fff" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+    <div class="wallet"><span class="chip sand"><i class="ico-sand"></i><b class="w-sand">0</b></span><span class="chip pearls"><i class="ico-pearl"></i><b class="w-pearls">0</b></span></div>
+    <button class="btn small orange" data-go="map">Raid!</button>
+  </div>
+  <div class="base-scroll">
+    <canvas id="base-canvas"></canvas>
+    <h2 class="sec">Upgrade your beach</h2>
+    <div id="upgrades" class="cards"></div>
+    <h2 class="sec">Shop</h2>
+    <p class="shop-note">Nothing is for sale yet. These are placeholders. You will never be able to buy troop power.</p>
+    <div id="shop" class="cards"></div>
+  </div>
+</section>
+<div id="modal-root" hidden><div id="modal" class="modal" role="dialog" aria-modal="true"></div></div>
+<div id="toast" role="status"></div>
+<script src="js/data.js"></script>
+<script src="js/engine.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/ads.js"></script>
+<script src="js/render.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

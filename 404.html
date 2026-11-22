@@ -14,6 +14,24 @@
     h1 { margin:0 0 .5rem; font-size:2.4rem; letter-spacing:-0.04em; }
     a { color:#3d4a5c; }
   </style>
+  <script>
+    (function () {
+      var project = location.hostname.endsWith("github.io");
+      var base = project ? "/jonidge-site/" : "/";
+      var path = location.pathname || "/";
+      var prefix = base + "play/radar-bite/";
+      var bare = prefix.slice(0, -1);
+      var rest = null;
+      if (path === bare) rest = "";
+      else if (path.indexOf(prefix) === 0) rest = path.slice(prefix.length);
+      if (rest !== null && !/\.[a-zA-Z0-9]{1,8}$/.test(rest)) {
+        try {
+          sessionStorage.setItem("jonidge-radar-bite-path", path + location.search + location.hash);
+        } catch (e) {}
+        location.replace(prefix);
+      }
+    })();
+  </script>
 </head>
 <body>
   <main class="error-page">

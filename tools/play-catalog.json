@@ -1,0 +1,64 @@
+{
+  "games": [
+    {
+      "name": "Sunplop",
+      "slug": "sunplop",
+      "kind": "game",
+      "blurb": "A daily logic puzzle: place two suns in every row and column, plus 2,485 more levels.",
+      "icon": "/play/sunplop/assets/icon-192.png",
+      "notes": []
+    },
+    {
+      "name": "Melt",
+      "slug": "melt",
+      "kind": "game",
+      "blurb": "Slide a heat lamp to melt the ice. Meltwater flows downhill and refreezes into bridges that help Puck the seal pup get home.",
+      "icon": null,
+      "notes": []
+    },
+    {
+      "name": "Rubber Band Bridge",
+      "slug": "rubber-band-bridge",
+      "kind": "game",
+      "blurb": "Stretch elastic bands between pegs to bounce, bridge and snap-launch Pip to the flag, but stretch too far and they snap.",
+      "icon": null,
+      "notes": []
+    },
+    {
+      "name": "Ferry Jam",
+      "slug": "ferry-jam",
+      "kind": "game",
+      "blurb": "Untangle a packed harbor parking lot and load every car onto the ferry of its color before the dock fills up.",
+      "icon": "/play/ferry-jam/assets/icon.svg",
+      "notes": []
+    },
+    {
+      "name": "Fin to Feather",
+      "slug": "fin-to-feather",
+      "kind": "game",
+      "blurb": "An endless runner where you start as a tiny fish and evolve into a mighty sky bird.",
+      "icon": "/play/icons/fin-to-feather.svg",
+      "notes": [
+        "Large download"
+      ]
+    },
+    {
+      "name": "Lilyward",
+      "slug": "lilyward",
+      "kind": "game",
+      "blurb": "Guard your frog eggs with a squad of upgradable pond frogs against waves of bugs and the mighty Old Stiltbeak.",
+      "icon": "/play/lilyward/assets/img/icon-192.png",
+      "notes": []
+    },
+    {
+      "name": "Radar Bite",
+      "slug": "radar-bite",
+      "kind": "app",
+      "blurb": "A free, food-only map of restaurants, takeaways and caf\u00e9s worldwide, from OpenStreetMap.",
+      "icon": "/play/icons/radar-bite.png",
+      "notes": [
+        "Map needs WebGL2"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>In development — Jonidge</title>
+  <meta name="description" content="Password-protected game and app prototypes from Jonidge, for friends and testers.">
+  <meta name="robots" content="noindex,nofollow">
+  <meta name="theme-color" content="#F6F6F4">
+  <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+  <link rel="icon" href="/assets/favicon-32.png" type="image/png" sizes="32x32">
+  <link rel="apple-touch-icon" href="/assets/apple-touch-icon.png">
+  <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+  <a class="skip" href="#main">Skip to content</a>
+  <header class="site-header">
+    <div class="wrap">
+      <a class="brand" href="/">
+        <img class="mark" src="/assets/jonidge-mark.svg" width="32" height="32" alt="">
+        <span class="name">Jonidge</span>
+      </a>
+      <nav class="nav-links" aria-label="Primary">
+        <a href="/#games">Games</a>
+        <a href="/play/" aria-current="page">In development</a>
+        <a href="mailto:jonidge@yahoo.com">Contact</a>
+      </nav>
+    </div>
+  </header>
+
+  <main id="main">
+    <section class="play-lock wrap" id="play-lock">
+      <div class="play-lock-card">
+        <span class="dev-lock-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="36" height="36" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="4.5" y="10.5" width="15" height="10.5" rx="2"></rect>
+            <path d="M8 10.5V7.5a4 4 0 0 1 8 0v3"></path>
+          </svg>
+        </span>
+        <p class="section-kicker">In development</p>
+        <h1>Games &amp; apps in development</h1>
+        <p class="play-lock-copy">Friends and testers: these prototypes are password protected. Enter the password you were given to try them in the browser.</p>
+        <form id="play-form" action="#" method="post">
+          <label for="play-password">Password</label>
+          <div class="play-row">
+            <input id="play-password" name="password" type="password" inputmode="numeric" autocomplete="off" required autofocus>
+            <button type="submit" class="btn-play">Unlock</button>
+          </div>
+          <p class="play-error" id="play-error" hidden role="alert">That password doesn’t match.</p>
+        </form>
+      </div>
+    </section>
+
+    <section class="section wrap play-list" id="play-list" hidden>
+      <div class="play-list-head">
+        <div>
+          <h2 class="section-kicker">In development</h2>
+          <h1 class="play-list-title">Games &amp; apps in development</h1>
+          <p class="play-list-intro">Early builds for friends and testers. Things may change or break.</p>
+        </div>
+        <button type="button" class="lock-again" id="play-relock">Lock this browser</button>
+      </div>
+      <div class="play-grid" id="play-grid"></div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="wrap">
+      <a class="brand" href="/">
+        <img class="mark" src="/assets/jonidge-mark.svg" width="32" height="32" alt="">
+        <span class="name">Jonidge</span>
+      </a>
+      <div class="footer-contact">
+        <a href="mailto:jonidge@yahoo.com">jonidge@yahoo.com</a>
+        <nav class="footer-links" aria-label="Legal">
+          <a href="/sunplop/privacy/">Privacy</a>
+          <a href="/sunplop/terms/">Terms</a>
+          <a href="/sunplop/support/">Support</a>
+        </nav>
+      </div>
+      <p class="copyright">© 2026 Jonidge</p>
+    </div>
+  </footer>
+
+  <script src="/play/vendor/crypto-js.min.js"></script>
+  <script src="/play/gate.js"></script>
+  <script>
+    document.addEventListener("DOMContentLoaded", function () {
+      if (window.JonidgePlay) window.JonidgePlay.initHub();
+    });
+  </script>
+</body>
+</html>

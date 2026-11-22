@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+<!-- jonidge-play-gate -->
+<meta name="robots" content="noindex,nofollow">
+<style id="jonidge-gate-css">html{visibility:hidden!important}</style>
+<script>
+(function(){
+  try {
+    var t = localStorage.getItem("jonidge-play-v1") || "";
+    if (!/^v1\.[0-9a-f]{128}$/i.test(t)) {
+      location.replace("/play/");
+      return;
+    }
+    var s = document.getElementById("jonidge-gate-css");
+    if (s) s.remove();
+  } catch (e) {
+    location.replace("/play/");
+  }
+})();
+</script>
+
+<script>
+(function () {
+  var p = location.pathname;
+  if (p && !/\/$/.test(p) && !/\.[a-zA-Z0-9]+$/.test(p)) {
+    location.replace(p + '/' + location.search + location.hash);
+  }
+})();
+</script>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#FFB627">
+<meta name="description" content="Sunplop: a daily logic puzzle. Two suns in every row and column.">
+<title>Sunplop · daily sun puzzle</title>
+<link rel="icon" href="assets/icon.svg" type="image/svg+xml">
+<link rel="icon" href="assets/favicon-32.png" sizes="32x32" type="image/png">
+<link rel="apple-touch-icon" href="assets/apple-touch-icon-180.png">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div id="app">
+  <header class="topbar">
+    <button class="logo" id="logo" aria-label="Sunplop"><span class="logo-sun"></span><span class="logo-text">Sunplop</span><span class="test-build-badge" title="Browser test build: purchases are simulated, ads are off">Test build</span></button>
+    <div class="chips">
+      <button class="chip chip-streak" id="chip-streak"></button>
+      <button class="chip chip-coins" id="chip-coins"></button>
+      <button class="icon-btn" id="btn-help" aria-label="Help">?</button>
+      <button class="icon-btn" id="btn-settings" aria-label="Settings"></button>
+    </div>
+  </header>
+  <main id="view"></main>
+  <!-- Ad slot (50 px): in the app the native AdMob banner is drawn over it; hidden when "No ads" is owned. -->
+  <div id="ad-banner" class="ad-banner hidden" aria-hidden="true"></div>
+  <nav class="tabbar" id="tabbar"></nav>
+</div>
+<div id="modal-root"></div>
+<canvas id="fx"></canvas>
+<div id="toast" role="status"></div>
+<script src="js/native.js"></script>
+<script src="js/config.js"></script>
+<script src="js/platform.js"></script>
+<script src="js/i18n.js"></script>
+<script src="js/levels-data.js"></script>
+<script src="js/puzzle.js"></script>
+<script src="js/economy.js"></script>
+<script src="js/ads.js"></script>
+<script src="js/iap.js"></script>
+<script src="js/web-build.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/reminders.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

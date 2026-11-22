@@ -1,0 +1,9 @@
+{
+  "name": "Ferry Jam",
+  "short_name": "Ferry Jam",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#0E7490",
+  "theme_color": "#0E7490",
+  "icons": [{ "src": "assets/icon.svg", "sizes": "any", "type": "image/svg+xml" }]
+}

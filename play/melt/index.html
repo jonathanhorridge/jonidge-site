@@ -1,0 +1,1409 @@
+<!doctype html>
+<html lang="en">
+<head>
+<!-- jonidge-play-gate -->
+<meta name="robots" content="noindex,nofollow">
+<style id="jonidge-gate-css">html{visibility:hidden!important}</style>
+<script>
+(function(){
+  try {
+    var t = localStorage.getItem("jonidge-play-v1") || "";
+    if (!/^v1\.[0-9a-f]{128}$/i.test(t)) {
+      location.replace("/play/");
+      return;
+    }
+    var s = document.getElementById("jonidge-gate-css");
+    if (s) s.remove();
+  } catch (e) {
+    location.replace("/play/");
+  }
+})();
+</script>
+
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#0e1b30">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Melt — prototype</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 16 16%22%3E%3Ctext y=%2214%22 font-size=%2214%22%3E%E2%9D%84%3C/text%3E%3C/svg%3E">
+<style>
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;background:#0e1b30;color:#eaf6ff;font-family:ui-rounded,"SF Pro Rounded","Nunito","Segoe UI",system-ui,sans-serif;overflow:hidden;overscroll-behavior:none;touch-action:none;-webkit-user-select:none;user-select:none}
+#app{position:fixed;inset:0;max-width:560px;margin:0 auto;overflow:hidden}
+canvas#game{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none}
+.hidden{display:none!important}
+button{font:inherit;color:inherit;border:0;cursor:pointer;touch-action:manipulation}
+.icon{width:40px;height:40px;border-radius:14px;background:rgba(220,240,255,.12);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);font-size:20px;border:1px solid rgba(220,240,255,.18)}
+.pill{padding:10px 16px;border-radius:999px;background:rgba(220,240,255,.14);border:1px solid rgba(220,240,255,.22);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);font-weight:700;font-size:15px}
+.pill.big{padding:10px 20px}
+.pill:active,.icon:active,.cta:active{transform:scale(.96)}
+#hud{position:absolute;inset:0;pointer-events:none}
+#hud button{pointer-events:auto}
+.hud-top{position:absolute;top:calc(8px + env(safe-area-inset-top));left:10px;right:10px;display:flex;align-items:center;gap:10px}
+.hud-title{flex:1;text-align:center;line-height:1.1;text-shadow:0 1px 6px rgba(0,0,0,.4)}
+#hudWorld{font-size:11px;letter-spacing:.12em;text-transform:uppercase;opacity:.7}
+#hudName{font-size:18px;font-weight:800}
+.hud-meters{position:absolute;top:calc(56px + env(safe-area-inset-top));left:12px;right:12px;display:flex;gap:10px;align-items:center}
+.meter{flex:1;display:flex;align-items:center;gap:6px;font-size:12px;font-weight:700}
+.meter .bar{position:relative;flex:1;height:8px;border-radius:8px;background:rgba(220,240,255,.15);overflow:hidden}
+.meter .fill{position:absolute;left:0;top:0;bottom:0;width:0;background:linear-gradient(90deg,#ffcf6e,#ff8a3d);border-radius:8px;transition:background .3s}
+.meter .fill.over{background:linear-gradient(90deg,#ff7a6b,#e2384d)}
+.meter .fill.water{background:linear-gradient(90deg,#8fe0ff,#3fa8ff)}
+.meter .par{position:absolute;top:-2px;bottom:-2px;width:2px;background:#fff;opacity:.8}
+.mval{min-width:34px;text-align:right;opacity:.85}
+.mlabel{opacity:.8}
+.flake-ico{font-size:22px;color:#cfefff;text-shadow:0 0 10px #8fd3ff;transition:all .3s}
+.flake-ico.lost{opacity:.25;filter:grayscale(1);text-shadow:none;transform:scale(.8)}
+.flake-ico.got{color:#fff;text-shadow:0 0 14px #fff,0 0 24px #8fd3ff;transform:scale(1.15)}
+.hud-bottom{position:absolute;bottom:calc(14px + env(safe-area-inset-bottom));left:12px;right:12px;display:flex;justify-content:space-between;gap:10px}
+#btnRewind.on{background:rgba(120,200,255,.4)}
+.toast{position:absolute;left:50%;top:calc(92px + env(safe-area-inset-top));transform:translateX(-50%) translateY(-6px);max-width:86%;text-align:center;padding:10px 16px;border-radius:16px;background:rgba(10,24,44,.72);border:1px solid rgba(200,235,255,.2);font-size:14px;line-height:1.35;opacity:0;transition:opacity .4s,transform .4s;pointer-events:none}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+.screen{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;padding:calc(20px + env(safe-area-inset-top)) 20px calc(20px + env(safe-area-inset-bottom))}
+#title{justify-content:space-between}
+.logo{margin-top:8vh;text-align:center;width:100%}
+.logo svg{width:min(86%,380px);overflow:visible}
+.logo-text{font-size:120px;font-weight:900;letter-spacing:-4px;font-family:ui-rounded,"SF Pro Rounded","Nunito","Arial Rounded MT Bold",system-ui,sans-serif;filter:drop-shadow(0 4px 18px rgba(120,200,255,.45))}
+.drip{animation:drip 2.8s ease-in infinite;transform-origin:center top;transform-box:fill-box}
+.d2{animation-delay:1.1s}.d3{animation-delay:1.9s}
+@keyframes drip{0%{transform:translateY(-6px) scaleY(.3);opacity:0}25%{opacity:1;transform:translateY(0) scaleY(1)}70%{transform:translateY(4px) scaleY(1.15);opacity:1}100%{transform:translateY(60px) scaleY(.6);opacity:0}}
+.tag{margin-top:6px;font-size:16px;line-height:1.45;opacity:.85}
+.title-buttons{display:flex;flex-direction:column;gap:12px;align-items:center;margin-bottom:6vh}
+.cta{padding:16px 64px;border-radius:999px;font-size:22px;font-weight:900;color:#0e1b30;background:linear-gradient(180deg,#fff6d9,#ffc35a);box-shadow:0 8px 30px rgba(255,180,80,.35),inset 0 -3px 0 rgba(0,0,0,.12)}
+.foot{text-align:center;font-size:13px;opacity:.7;line-height:1.5}
+.small{font-size:11px;opacity:.75}
+.sel-head{width:100%;display:flex;align-items:center;gap:12px;margin-bottom:18px}
+.sel-head>div:nth-child(2){flex:1}
+.sel-world{font-size:11px;letter-spacing:.12em;text-transform:uppercase;opacity:.7}
+.sel-name{font-size:24px;font-weight:900}
+.sel-stars{font-weight:800;color:#ffd36e}
+.grid{width:100%;display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:auto}
+.lv{aspect-ratio:1/1.05;border-radius:20px;background:linear-gradient(180deg,rgba(225,245,255,.2),rgba(150,205,240,.08));border:1px solid rgba(220,240,255,.25);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
+.lv .n{font-size:28px;font-weight:900}
+.lv .nm{font-size:11px;opacity:.8;text-align:center;padding:0 4px}
+.lv .st{font-size:13px;letter-spacing:2px;color:#ffd36e}
+.lv .st .off{color:rgba(255,255,255,.22)}
+.lv.locked{opacity:.38}
+.lv.next{box-shadow:0 0 0 2px #ffc35a,0 0 24px rgba(255,195,90,.35)}
+.modal{position:absolute;inset:0;background:rgba(6,14,28,.55);display:flex;align-items:center;justify-content:center;padding:24px;animation:fade .25s}
+@keyframes fade{from{opacity:0}to{opacity:1}}
+.card{width:100%;max-width:340px;border-radius:28px;padding:24px 20px 18px;text-align:center;background:linear-gradient(180deg,rgba(240,250,255,.22),rgba(150,205,240,.12));border:1px solid rgba(230,245,255,.35);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);box-shadow:0 20px 60px rgba(0,0,0,.35);animation:pop .35s cubic-bezier(.2,1.4,.5,1)}
+@keyframes pop{from{transform:scale(.85);opacity:0}to{transform:scale(1);opacity:1}}
+.m-title{font-size:26px;font-weight:900}
+.stars{font-size:46px;margin:8px 0 2px;letter-spacing:6px}
+.stars span{color:rgba(255,255,255,.18);display:inline-block;transition:transform .3s}
+.stars span.on{color:#ffd36e;text-shadow:0 0 18px rgba(255,200,90,.7);animation:star .45s cubic-bezier(.2,1.6,.5,1)}
+@keyframes star{from{transform:scale(0) rotate(-40deg)}to{transform:scale(1) rotate(0)}}
+.m-body{font-size:14px;line-height:1.5;opacity:.9;margin:8px 0 16px}
+.m-body .row{display:flex;justify-content:space-between;padding:3px 8px}
+.m-buttons{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
+.m-buttons .cta{padding:12px 30px;font-size:18px}
+
+</style>
+</head>
+<body>
+<div id="app">
+  <canvas id="game"></canvas>
+
+  <!-- HUD -->
+  <div id="hud" class="hidden">
+    <div class="hud-top">
+      <button class="icon" id="btnBack" aria-label="Levels">&#9776;</button>
+      <div class="hud-title"><div id="hudWorld">World 1</div><div id="hudName">First Thaw</div></div>
+      <button class="icon" id="btnMute" aria-label="Sound">&#9834;</button>
+    </div>
+    <div class="hud-meters">
+      <div class="meter" id="thermo" title="Lamp time"><span class="mlabel">&#127777;</span><div class="bar"><div class="fill" id="thermoFill"></div><div class="par" id="thermoPar"></div></div><span class="mval" id="thermoVal">0.0s</span></div>
+      <div class="meter hidden" id="basinMeter"><span class="mlabel">&#9634;</span><div class="bar"><div class="fill water" id="basinFill"></div></div><span class="mval" id="basinVal">0%</span></div>
+      <div class="flake-ico" id="flakeIco" title="Snowflake">&#10052;</div>
+    </div>
+    <div class="hud-bottom">
+      <button class="pill" id="btnRestart">&#8635; Restart</button>
+      <button class="pill big" id="btnRewind">&#9194; Hold to rewind</button>
+    </div>
+    <div id="toast" class="toast"></div>
+  </div>
+
+  <!-- Title -->
+  <div id="title" class="screen">
+    <div class="logo">
+      <svg viewBox="0 0 320 150" aria-label="melt">
+        <defs>
+          <linearGradient id="ig" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f4fbff"/><stop offset="1" stop-color="#8fd3ff"/></linearGradient>
+        </defs>
+        <text x="160" y="100" text-anchor="middle" class="logo-text" fill="url(#ig)">melt</text>
+        <path class="drip d1" d="M96 98 q4 0 4 10 q0 18 -4 18 q-4 0 -4 -18 q0 -10 4 -10z" fill="#bfe8ff"/>
+        <path class="drip d2" d="M188 100 q3 0 3 8 q0 12 -3 12 q-3 0 -3 -12 q0 -8 3 -8z" fill="#bfe8ff"/>
+        <path class="drip d3" d="M238 96 q3 0 3 8 q0 14 -3 14 q-3 0 -3 -14 q0 -8 3 -8z" fill="#bfe8ff"/>
+      </svg>
+      <div class="tag">Melt the ice. Watch it flow.<br>Let it freeze into the path Puck needs.</div>
+    </div>
+    <div class="title-buttons">
+      <button class="cta" id="btnPlay">Play</button>
+      <button class="pill" id="btnLevels">Levels</button>
+    </div>
+    <div class="foot">One finger. Touch to heat, lift to stop.<br><span class="small">Prototype v0.1 · World 1: Glacier Gate</span></div>
+  </div>
+
+  <!-- Level select -->
+  <div id="select" class="screen hidden">
+    <div class="sel-head"><button class="icon" id="btnHome" aria-label="Home">&#8592;</button><div><div class="sel-world">World 1</div><div class="sel-name">Glacier Gate</div></div><div class="sel-stars" id="selStars">0 &#9733;</div></div>
+    <div class="grid" id="levelGrid"></div>
+    <div class="foot small">Clear a level to open the next ones. Stars: clear · lamp time under par · keep the snowflake.</div>
+  </div>
+
+  <!-- Modals -->
+  <div id="modal" class="modal hidden">
+    <div class="card">
+      <div class="m-title" id="mTitle">Nice drip.</div>
+      <div class="stars" id="mStars"><span>&#9733;</span><span>&#9733;</span><span>&#9733;</span></div>
+      <div class="m-body" id="mBody"></div>
+      <div class="m-buttons" id="mButtons"></div>
+    </div>
+  </div>
+</div>
+<script>
+/* Melt simulation core — engine-independent, deterministic, integer-only.
+ * No DOM, no randomness, no floats in state. Port 1:1 to GDScript/C#.
+ * Grid: level chars are SCALE x SCALE sim cells. */
+(function (root, factory) {
+  if (typeof module === 'object' && module.exports) module.exports = factory();
+  else root.MeltSim = factory();
+})(typeof self !== 'undefined' ? self : this, function () {
+  'use strict';
+  var SCALE = 3;
+  var EMPTY = 0, ROCK = 1, ICE = 2, WATER = 3, NEWICE = 4, FROST = 5, DRAIN = 6, THICK = 7;
+  var CFG = {
+    tickHz: 30,
+    lampCore2: 16,      // core radius^2 (sim cells)
+    lampRing2: 36,      // falloff radius^2
+    heatCore: 4, heatRing: 2,
+    melt: 48, meltThick: 150,
+    chillCold: 40,      // ticks in a cold zone before water freezes
+    chillFrost: 6,      // ticks touching frost before water freezes
+    waterHeatMax: 24,   // lamp keeps water warm this many ticks after leaving
+    flakeMelt: 8,       // ticks of lamp core on the flake before it melts
+    flowSearch: 20,
+    puckWait: 30, puckStepRock: 4, puckStepIce: 2, puckMaxDrop: 4, puckHop: 3, puckDeadFall: 10,
+    basinHold: 15
+  };
+
+  function parseLevel(text) {
+    var lines = text.replace(/\r/g, '').split('\n');
+    var meta = {}, map = [], inMap = false;
+    for (var i = 0; i < lines.length; i++) {
+      var l = lines[i];
+      if (!inMap) {
+        if (l.trim() === '---') { inMap = true; continue; }
+        var m = l.match(/^\s*(\w+)\s*:\s*(.*)$/);
+        if (m) meta[m[1]] = m[2].trim();
+      } else if (l.trim().length) map.push(l.trim());
+    }
+    var w = 0; map.forEach(function (r) { w = Math.max(w, r.length); });
+    map = map.map(function (r) { while (r.length < w) r += '.'; return r; });
+    return { meta: meta, map: map, cw: w, ch: map.length };
+  }
+
+  function Sim(levelText) {
+    var lv = parseLevel(levelText);
+    this.meta = lv.meta; this.map = lv.map;
+    var W = this.W = lv.cw * SCALE, H = this.H = lv.ch * SCALE;
+    var N = W * H;
+    this.type = new Uint8Array(N); this.heat = new Int16Array(N);
+    this.chill = new Uint8Array(N); this.calm = new Uint8Array(N);
+    this.cold = new Uint8Array(N); this.basin = new Uint8Array(N);
+    this.stamp = new Uint16Array(N);
+    this.tick = 0; this.lampTicks = 0; this.drained = 0;
+    this.puck = null; this.den = null; this.flake = null;
+    this.goals = (lv.meta.goal || 'den').split('+');
+    this.basinTarget = parseInt(lv.meta.basin || '0', 10);
+    this.basinOk = 0; this.state = 'play'; this.failReason = '';
+    var self = this;
+    function fillChar(cx, cy, fn) {
+      for (var dy = 0; dy < SCALE; dy++) for (var dx = 0; dx < SCALE; dx++) fn(cx * SCALE + dx, cy * SCALE + dy, dx, dy);
+    }
+    for (var cy = 0; cy < lv.ch; cy++) for (var cx = 0; cx < lv.cw; cx++) {
+      var c = lv.map[cy][cx];
+      fillChar(cx, cy, function (x, y, dx, dy) {
+        var i = y * W + x, t = self.type;
+        switch (c) {
+          case '#': t[i] = ROCK; break;
+          case 'I': t[i] = ICE; break;
+          case 'T': t[i] = THICK; break;
+          case 'K': t[i] = ICE; self.cold[i] = 1; break;
+          case 'Q': self.cold[i] = 1; break;
+          case 'U': t[i] = THICK; self.cold[i] = 1; break;
+          case '*': self.cold[i] = 1; break;
+          case '=': self.basin[i] = 1; break;
+          case 'F': t[i] = FROST; break;
+          case 'v': t[i] = DRAIN; break;
+          case '/': if (dx >= SCALE - 1 - dy) t[i] = ROCK; break;
+          case '\\': if (dx <= dy) t[i] = ROCK; break;
+          case 'W': t[i] = WATER; break;
+        }
+      });
+      if (c === 'P' || c === 'Q') self.puck = { x: cx * SCALE, y: cy * SCALE, dir: 1, timer: 0, fall: 0, mode: 'wait', wait: CFG.puckWait, onIce: false, flake: false };
+      if (c === 'D') self.den = { cx: cx, cy: cy, x: cx * SCALE, y: cy * SCALE };
+      if (c === 'f') self.flake = { x: cx * SCALE + 1, y: cy * SCALE + 1, heat: 0, alive: true, taken: false };
+    }
+    if (this.puck && this.den) this.puck.dir = this.den.x >= this.puck.x ? 1 : -1;
+    this.waterTotal0 = this.countWaterAll();
+  }
+  var P = Sim.prototype;
+  P.idx = function (x, y) { return y * this.W + x; };
+  P.at = function (x, y) { if (x < 0 || x >= this.W) return ROCK; if (y < 0) return EMPTY; if (y >= this.H) return -1; return this.type[y * this.W + x]; };
+  function isSolid(t) { return t === ROCK || t === ICE || t === NEWICE || t === FROST || t === DRAIN || t === THICK; }
+  P.isSolid = function (x, y) { var t = this.at(x, y); return t !== -1 && isSolid(t); };
+  P.countWaterAll = function () {
+    var n = 0, t = this.type;
+    for (var i = 0; i < t.length; i++) if (t[i] === WATER || t[i] === ICE || t[i] === NEWICE || t[i] === THICK) n++;
+    return n;
+  };
+  P.basinCount = function () {
+    var n = 0, t = this.type, b = this.basin;
+    for (var i = 0; i < t.length; i++) if (b[i] && (t[i] === WATER || t[i] === NEWICE)) n++;
+    return n;
+  };
+
+  /* input: { on: bool, x: int, y: int } in sim cells. Returns events. */
+  P.step = function (input) {
+    var ev = { melt: [], freeze: [], drain: 0, sizzle: 0, puck: null, flake: null, land: 0 };
+    if (this.state !== 'play') { this.tick++; return ev; }
+    var W = this.W, H = this.H, t = this.type, heat = this.heat, chill = this.chill, calm = this.calm, cold = this.cold;
+    var st = (this.tick & 0xffff) + 1; if (st > 0xffff) st = 1;
+    var stamp = this.stamp;
+    var heated = null;
+    // 1. lamp
+    if (input && input.on) {
+      this.lampTicks++;
+      var lx = input.x | 0, ly = input.y | 0, R = 6;
+      heated = true;
+      for (var y = Math.max(0, ly - R); y <= Math.min(H - 1, ly + R); y++) {
+        for (var x = Math.max(0, lx - R); x <= Math.min(W - 1, lx + R); x++) {
+          var d2 = (x - lx) * (x - lx) + (y - ly) * (y - ly);
+          if (d2 > CFG.lampRing2) continue;
+          var i = y * W + x, tt = t[i], amt = d2 <= CFG.lampCore2 ? CFG.heatCore : CFG.heatRing;
+          if (tt === ICE || tt === NEWICE || tt === THICK) {
+            heat[i] += amt; stamp[i] = st;
+            var th = tt === THICK ? CFG.meltThick : CFG.melt;
+            if (heat[i] >= th) { t[i] = WATER; heat[i] = CFG.waterHeatMax; chill[i] = 0; calm[i] = 0; ev.melt.push(i); }
+          } else if (tt === WATER) {
+            heat[i] = CFG.waterHeatMax; chill[i] = 0; stamp[i] = st; ev.sizzle++;
+          }
+        }
+      }
+      if (this.flake && this.flake.alive && !this.flake.taken) {
+        var fd = (this.flake.x - lx) * (this.flake.x - lx) + (this.flake.y - ly) * (this.flake.y - ly);
+        if (fd <= CFG.lampCore2) { this.flake.heat++; if (this.flake.heat >= CFG.flakeMelt) { this.flake.alive = false; ev.flake = 'melt'; } }
+      }
+    }
+    // 2. heat decay for ice not heated this tick
+    for (var k = 0; k < t.length; k++) {
+      if (heat[k] > 0 && stamp[k] !== st) {
+        heat[k]--;
+      }
+    }
+    // 3. water flow, bottom-up, alternating scan direction
+    var mv = new Uint8Array(0); // placeholder for clarity
+    var moved = this._moved || (this._moved = new Uint8Array(W * H));
+    moved.fill(0);
+    for (var y2 = H - 1; y2 >= 0; y2--) {
+      var p = ((this.tick + y2) & 1) ? 1 : -1;
+      for (var s = 0; s < W; s++) {
+        var x2 = p > 0 ? s : W - 1 - s;
+        var i2 = y2 * W + x2;
+        if (t[i2] !== WATER || moved[i2]) continue;
+        var dest = -1, below = y2 + 1 < H ? t[i2 + W] : -1;
+        if (below === -1) { this._remove(i2); ev.drain++; this.drained++; continue; }
+        if (below === DRAIN) { this._remove(i2); ev.drain++; this.drained++; continue; }
+        if (below === EMPTY) dest = i2 + W;
+        else {
+          // diagonal down
+          for (var a = 0; a < 2 && dest < 0; a++) {
+            var d = a === 0 ? p : -p, nx = x2 + d;
+            if (nx < 0 || nx >= W) continue;
+            if (t[i2 + d] === EMPTY && y2 + 1 < H && t[i2 + W + d] === EMPTY) dest = i2 + W + d;
+          }
+          // search for a drop along the row
+          if (dest < 0) {
+            var best = 999, bestD = 0;
+            for (var b = 0; b < 2; b++) {
+              var dd = b === 0 ? p : -p;
+              for (var kk = 1; kk <= CFG.flowSearch; kk++) {
+                var sx = x2 + dd * kk; if (sx < 0 || sx >= W) break;
+                var si = y2 * W + sx; if (t[si] !== EMPTY) break;
+                var bt = y2 + 1 < H ? t[si + W] : -1;
+                if (bt === EMPTY || bt === DRAIN || bt === -1) { if (kk < best) { best = kk; bestD = dd; } break; }
+              }
+            }
+            if (bestD) dest = i2 + bestD;
+          }
+          // pressure: water above pushes sideways
+          if (dest < 0 && y2 > 0 && t[i2 - W] === WATER) {
+            for (var c2 = 0; c2 < 2 && dest < 0; c2++) {
+              var d3 = c2 === 0 ? p : -p, nx3 = x2 + d3;
+              if (nx3 < 0 || nx3 >= W) continue;
+              if (t[i2 + d3] === EMPTY) dest = i2 + d3;
+            }
+          }
+        }
+        if (dest >= 0) {
+          if (below === EMPTY && dest === i2 + W && y2 + 2 < H && t[dest + W] !== EMPTY) ev.land++;
+          t[dest] = WATER; heat[dest] = heat[i2]; chill[dest] = chill[i2]; calm[dest] = 0; moved[dest] = 1;
+          stamp[dest] = stamp[i2];
+          this._remove(i2);
+        } else if (calm[i2] < 255) calm[i2]++;
+      }
+    }
+    // 4. chill & freeze
+    for (var y3 = H - 1; y3 >= 0; y3--) for (var x3 = 0; x3 < W; x3++) {
+      var i3 = y3 * W + x3;
+      if (t[i3] !== WATER) continue;
+      if (heat[i3] > 0) { chill[i3] = 0; continue; }
+      var frost = this.at(x3 - 1, y3) === FROST || this.at(x3 + 1, y3) === FROST || this.at(x3, y3 + 1) === FROST || this.at(x3, y3 - 1) === FROST;
+      if (cold[i3] || frost) {
+        if (chill[i3] < 255) chill[i3]++;
+        var need = frost ? CFG.chillFrost : CFG.chillCold;
+        if (chill[i3] >= need) {
+          // must touch something solid (freezes from the edges inward)
+          if (this.isSolid(x3, y3 + 1) || this.isSolid(x3 - 1, y3) || this.isSolid(x3 + 1, y3) || this.isSolid(x3, y3 - 1)) {
+            t[i3] = NEWICE; heat[i3] = 0; ev.freeze.push(i3);
+          }
+        }
+      } else if (chill[i3] > 0) chill[i3]--;
+    }
+    // 5. Puck
+    if (this.puck) this._stepPuck(ev);
+    // 6. flake pickup
+    if (this.flake && this.flake.alive && !this.flake.taken && this.puck) {
+      var pk = this.puck, f = this.flake;
+      if (f.x >= pk.x && f.x < pk.x + 3 && f.y >= pk.y - 1 && f.y < pk.y + 3) { f.taken = true; ev.flake = 'take'; }
+    }
+    // 7. goals
+    this._checkGoals(ev);
+    this.tick++;
+    return ev;
+  };
+  P._remove = function (i) { this.type[i] = EMPTY; this.heat[i] = 0; this.chill[i] = 0; this.calm[i] = 0; };
+
+  P._footFree = function (x, y) {
+    for (var dy = 0; dy < 3; dy++) for (var dx = 0; dx < 3; dx++) { if (this.isSolid(x + dx, y + dy)) return false; }
+    return true;
+  };
+  P._isDen = function (x, y) { var d = this.den; if (!d) return false; var cx = x + 1, cy = y + 1; return cx >= d.x - 1 && cx < d.x + 4 && cy >= d.y - 1 && cy < d.y + 3; };
+  P._wetness = function (x, y, drop) {
+    var n = 0;
+    for (var dy = 0; dy < 3; dy++) for (var dx = 0; dx < 3; dx++) {
+      var yy = y + drop + dy, xx = x + dx;
+      if (this.at(xx, yy) === WATER) { n++; if (drop > 0 && this.cold[yy * this.W + xx]) return 99; }
+    }
+    return n;
+  };
+  P._supported = function (x, y) {
+    for (var dx = 0; dx < 3; dx++) if (this.isSolid(x + dx, y + 3)) return true;
+    return false;
+  };
+  P._stepPuck = function (ev) {
+    var pk = this.puck, W = this.W, H = this.H;
+    if (pk.mode === 'home' || pk.mode === 'dead') return;
+    // encased?
+    for (var dy = 0; dy < 3; dy++) for (var dx = 0; dx < 3; dx++) {
+      var tt = this.at(pk.x + dx, pk.y + dy);
+      if (tt === NEWICE || tt === ICE || tt === THICK) { return this._fail('Puck got frozen in!', ev); }
+    }
+    if (!this._supported(pk.x, pk.y)) {
+      pk.y++; pk.fall++; if (pk.mode !== 'fall') { pk.mode = 'fall'; }
+      if (pk.y + 3 > H) return this._fail('Puck fell into the abyss!', ev);
+      return;
+    }
+    if (pk.mode === 'fall') {
+      ev.land++;
+      if (pk.fall > CFG.puckDeadFall) return this._fail('Ouch! That drop was too far for Puck.', ev);
+      pk.fall = 0; pk.mode = 'walk'; ev.puck = 'land';
+    }
+    pk.fall = 0;
+    if (pk.wait > 0) { pk.wait--; pk.mode = 'wait'; return; }
+    // on ice?
+    var ice = 0;
+    for (var dx2 = 0; dx2 < 3; dx2++) { var bt = this.at(pk.x + dx2, pk.y + 3); if (bt === ICE || bt === NEWICE || bt === THICK || bt === FROST) ice++; }
+    var wasIce = pk.onIce; pk.onIce = ice >= 2;
+    if (pk.onIce && !wasIce) ev.puck = 'slide';
+    pk.timer++;
+    var every = pk.onIce ? CFG.puckStepIce : CFG.puckStepRock;
+    if (pk.timer < every) return;
+    pk.timer = 0;
+    var nx = pk.x + pk.dir;
+    if (nx < 0 || nx + 3 > W) { pk.mode = 'blocked'; return; }
+    if (this._footFree(nx, pk.y)) {
+      var depth = 0;
+      if (!this._supported(nx, pk.y)) {
+        // how deep is the drop?
+        while (depth <= CFG.puckMaxDrop + 1) {
+          var yy = pk.y + 3 + depth, any = false;
+          for (var dx3 = 0; dx3 < 3; dx3++) if (this.isSolid(nx + dx3, yy)) any = true;
+          if (any || yy >= H) break;
+          depth++;
+        }
+        if (depth > CFG.puckMaxDrop) { if (pk.mode !== 'edge') ev.puck = 'edge'; pk.mode = 'edge'; return; }
+      }
+      // Puck won't wade into water deeper than a puddle (seal pups can't swim yet)
+      if (!this._isDen(nx, pk.y + (depth || 0)) && this._wetness(nx, pk.y, depth || 0) > 6) { if (pk.mode !== 'edge') ev.puck = 'edge'; pk.mode = 'edge'; return; }
+      pk.x = nx; pk.mode = 'walk';
+    } else {
+      var up = 0;
+      for (var u = 1; u <= CFG.puckHop; u++) {
+        if (!this._footFree(pk.x, pk.y - u)) break;
+        if (this._footFree(nx, pk.y - u)) { up = u; break; }
+      }
+      if (up) { pk.x = nx; pk.y -= up; pk.mode = 'walk'; if (up > 1) ev.puck = 'hop'; return; }
+      if (pk.mode !== 'blocked') ev.puck = 'blocked'; pk.mode = 'blocked';
+    }
+    if (false) { if (pk.mode !== 'blocked') ev.puck = 'blocked'; pk.mode = 'blocked'; }
+  };
+  P._fail = function (why, ev) {
+    this.state = 'fail'; this.failReason = why; if (this.puck) this.puck.mode = 'dead'; ev.puck = 'dead';
+  };
+  P._checkGoals = function (ev) {
+    if (this.state !== 'play') return;
+    var ok = true;
+    for (var g = 0; g < this.goals.length; g++) {
+      var goal = this.goals[g];
+      if (goal === 'sandbox') { ok = false; continue; }
+      if (goal === 'den') {
+        var pk = this.puck, dn = this.den;
+        var cx = pk.x + 1, cy = pk.y + 1;
+        var inDen = cx >= dn.x && cx < dn.x + 3 && cy >= dn.y - 1 && cy < dn.y + 3;
+        if (inDen && pk.mode !== 'fall') { if (pk.mode !== 'home') ev.puck = 'home'; pk.mode = 'home'; }
+        if (pk.mode !== 'home') ok = false;
+      } else if (goal === 'basin') {
+        var n = this.basinCount();
+        if (n >= this.basinTarget) this.basinOk++; else this.basinOk = 0;
+        if (this.basinOk < CFG.basinHold) ok = false;
+        if (n < this.basinTarget) {
+          // enough water left anywhere?
+          var t = this.type, b = this.basin, avail = 0;
+          for (var i = 0; i < t.length; i++) { var tt = t[i]; if (tt === WATER || tt === ICE || tt === NEWICE || tt === THICK) avail++; }
+          if (avail < this.basinTarget) { this.state = 'fail'; this.failReason = 'Not enough water left to fill the basin.'; return; }
+        }
+      }
+    }
+    if (ok) this.state = 'win';
+  };
+  P.stars = function () {
+    if (this.state !== 'win') return 0;
+    var par = parseFloat(this.meta.par || '99') * CFG.tickHz;
+    var s = 1;
+    if (this.lampTicks <= par) s++;
+    if (this.flake && this.flake.alive) s++;
+    if (!this.flake) s++;
+    return s;
+  };
+  P.snapshot = function () {
+    return {
+      type: this.type.slice(), heat: this.heat.slice(), chill: this.chill.slice(), calm: this.calm.slice(), stamp: this.stamp.slice(),
+      tick: this.tick, lampTicks: this.lampTicks, drained: this.drained, basinOk: this.basinOk, state: this.state, failReason: this.failReason,
+      puck: this.puck ? JSON.parse(JSON.stringify(this.puck)) : null,
+      flake: this.flake ? JSON.parse(JSON.stringify(this.flake)) : null
+    };
+  };
+  P.restore = function (s) {
+    this.type.set(s.type); this.heat.set(s.heat); this.chill.set(s.chill); this.calm.set(s.calm); this.stamp.set(s.stamp);
+    this.tick = s.tick; this.lampTicks = s.lampTicks; this.drained = s.drained; this.basinOk = s.basinOk; this.state = s.state; this.failReason = s.failReason;
+    this.puck = s.puck ? JSON.parse(JSON.stringify(s.puck)) : null;
+    this.flake = s.flake ? JSON.parse(JSON.stringify(s.flake)) : null;
+  };
+  P.hash = function () {
+    var h = 2166136261 >>> 0, t = this.type;
+    for (var i = 0; i < t.length; i++) { h ^= t[i]; h = Math.imul(h, 16777619) >>> 0; }
+    if (this.puck) { h ^= this.puck.x * 131 + this.puck.y; h = Math.imul(h, 16777619) >>> 0; }
+    return h >>> 0;
+  };
+  P.ascii = function () {
+    var ch = ' #iw~fvT', out = [];
+    for (var y = 0; y < this.H; y++) {
+      var r = '';
+      for (var x = 0; x < this.W; x++) {
+        var tt = this.type[y * this.W + x], c = ['.', '#', 'I', '~', 'n', 'F', 'v', 'T'][tt];
+        if (c === '.' && this.cold[y * this.W + x]) c = ':';
+        if (c === '.' && this.basin[y * this.W + x]) c = '_';
+        var pk = this.puck; if (pk && x >= pk.x && x < pk.x + 3 && y >= pk.y && y < pk.y + 3) c = 'P';
+        r += c;
+      }
+      out.push(r);
+    }
+    return out.join('\n');
+  };
+
+  return { Sim: Sim, parseLevel: parseLevel, SCALE: SCALE, CFG: CFG, T: { EMPTY: EMPTY, ROCK: ROCK, ICE: ICE, WATER: WATER, NEWICE: NEWICE, FROST: FROST, DRAIN: DRAIN, THICK: THICK } };
+});
+
+</script>
+<script>
+/* Melt — World 1 "Glacier Gate". Plain-text levels (one string per level).
+ * Legend: # rock  I ice  T thick ice  K ice in a cold zone  * cold zone (air)  Q Puck in a cold zone
+ *         = basin (air)  v drain grate  F frost plate  / \\ rock slopes  P Puck  D den  f snowflake  . air
+ * meta: name, goal (den | basin | den+basin), basin (target, sim cells), par (lamp seconds for 2nd star), hint */
+(function (root) {
+var LEVELS = [
+`name: First Thaw
+goal: den
+par: 1.6
+hint: Touch and hold the ice to melt it. Puck will waddle home.
+tap: 8.5, 15.5
+---
+...............
+...............
+...............
+...............
+...............
+...............
+...............
+...............
+...............
+...............
+...............
+...............
+...............
+...............
+...............
+........II.....
+.P......II.f.D.
+###############
+###############
+###############`,
+`name: Downhill
+goal: basin
+basin: 54
+par: 2.4
+hint: Meltwater runs downhill. Fill the basin to the brim.
+---
+...............
+...............
+...............
+...............
+...............
+...............
+...............
+...............
+...............
+...............
+.III...........
+.III...........
+.III.f.........
+###\\...........
+####\\..........
+#####\\.........
+######\\........
+#######\\===####
+########===####
+###############`,
+`name: Cold Snap
+goal: den
+par: 2.0
+hint: Water that settles in the blue cold zone freezes into new ice.
+---
+...............
+...............
+...............
+...............
+...............
+...............
+...............
+...............
+...............
+...............
+...............
+....####.......
+....IIII.......
+....IIII.......
+...............
+...............
+.P....f......D.
+#####***#######
+#####***#######
+###############`,
+`name: Shell Game
+goal: den
+par: 1.0
+hint: Puck is stuck behind an ice plug. Free him, but don't let drips from above freeze him in!
+---
+...............
+...............
+...............
+...............
+...............
+...............
+...............
+...............
+..III..........
+..III..........
+...............
+..#I...........
+..#QI..f.......
+##########\\....
+###########\\...
+############\\..
+#############D.
+###############
+###############
+###############`,
+`name: Brim
+goal: den
+par: 1.6
+hint: Puck can hop up one block. Fill the tub before he walks in!
+---
+...............
+...............
+...............
+...............
+...............
+...............
+...............
+...............
+...............
+...............
+...............
+........##.....
+........II.....
+........II.f...
+...............
+.............D.
+...........####
+.P.....#***####
+###############
+###############`,
+`name: Two Bridges
+goal: den
+par: 2.6
+hint: One block, two pits. Every drop counts, so melt all of it.
+---
+...............
+...............
+...............
+...............
+...............
+...............
+...............
+...............
+...............
+...............
+....IIII.......
+....IIII.......
+....IIII.......
+...............
+P..............
+###....f.....D.
+###***##***####
+###***##***####
+###############
+###############`,
+`name: Thin Ice
+goal: den
+par: 1.4
+hint: Dark thick ice melts slowly. Melt the wall, keep the bridge.
+---
+...............
+...............
+...............
+...............
+...............
+...............
+...............
+...............
+...............
+...............
+...............
+...............
+...............
+...............
+........f......
+........I......
+.P......I....D.
+####TTTTTTT####
+####.......####
+####.......####`,
+`name: Glacier Gate
+goal: den
+par: 3.2
+hint: Gate, bridge, step. Everything you learned, in order.
+---
+...............
+...............
+...............
+...............
+...............
+...............
+...............
+...............
+...............
+.....####......
+.....IIII......
+.....IIII......
+..........##...
+..........II...
+..........II.D.
+...I........###
+P..I.f...#**###
+#####***#######
+#####***#######
+###############`
+];
+if (typeof module === 'object' && module.exports) module.exports = LEVELS; else root.MELT_LEVELS = LEVELS;
+})(typeof self !== 'undefined' ? self : this);
+
+</script>
+<script>
+/* Melt — tiny WebAudio sfx kit. No assets; everything synthesised. */
+(function (root) {
+  var ctx = null, master = null, noiseBuf = null, sizzleGain = null, humGain = null, windGain = null;
+  var muted = false, lastMelt = 0, lastDrip = 0, lastFreeze = 0;
+  try { muted = localStorage.getItem('melt.muted') === '1'; } catch (e) {}
+  var PENTA = [0, 2, 4, 7, 9];
+  function init() {
+    if (ctx) { if (ctx.state === 'suspended') ctx.resume(); return; }
+    var AC = root.AudioContext || root.webkitAudioContext; if (!AC) return;
+    ctx = new AC();
+    master = ctx.createGain(); master.gain.value = muted ? 0 : 0.8; master.connect(ctx.destination);
+    noiseBuf = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate);
+    var d = noiseBuf.getChannelData(0); for (var i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    // sizzle loop
+    var n = ctx.createBufferSource(); n.buffer = noiseBuf; n.loop = true;
+    var hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 3500;
+    sizzleGain = ctx.createGain(); sizzleGain.gain.value = 0;
+    n.connect(hp); hp.connect(sizzleGain); sizzleGain.connect(master); n.start();
+    // lamp hum
+    var o = ctx.createOscillator(); o.type = 'sine'; o.frequency.value = 110;
+    var o2 = ctx.createOscillator(); o2.type = 'triangle'; o2.frequency.value = 220.7;
+    humGain = ctx.createGain(); humGain.gain.value = 0;
+    o.connect(humGain); o2.connect(humGain); humGain.connect(master); o.start(); o2.start();
+    // wind ambience
+    var w = ctx.createBufferSource(); w.buffer = noiseBuf; w.loop = true;
+    var lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 420; lp.Q.value = 0.7;
+    windGain = ctx.createGain(); windGain.gain.value = 0.035;
+    var lfo = ctx.createOscillator(); lfo.frequency.value = 0.08; var lfoG = ctx.createGain(); lfoG.gain.value = 180;
+    lfo.connect(lfoG); lfoG.connect(lp.frequency); lfo.start();
+    w.connect(lp); lp.connect(windGain); windGain.connect(master); w.start();
+  }
+  function env(g, t, a, peak, dec) { g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(peak, t + a); g.gain.exponentialRampToValueAtTime(0.0001, t + a + dec); }
+  function tone(freq, type, peak, dec, when, glideTo) {
+    if (!ctx) return; var t = ctx.currentTime + (when || 0);
+    var o = ctx.createOscillator(); o.type = type || 'sine'; o.frequency.setValueAtTime(freq, t);
+    if (glideTo) o.frequency.exponentialRampToValueAtTime(glideTo, t + dec);
+    var g = ctx.createGain(); env(g, t, 0.005, peak, dec); o.connect(g); g.connect(master); o.start(t); o.stop(t + dec + 0.05);
+  }
+  function noise(fType, freq, q, peak, dec, when) {
+    if (!ctx) return; var t = ctx.currentTime + (when || 0);
+    var s = ctx.createBufferSource(); s.buffer = noiseBuf; s.playbackRate.value = 0.8 + Math.random() * 0.4;
+    var f = ctx.createBiquadFilter(); f.type = fType; f.frequency.value = freq; f.Q.value = q || 1;
+    var g = ctx.createGain(); env(g, t, 0.003, peak, dec);
+    s.connect(f); f.connect(g); g.connect(master); s.start(t, Math.random()); s.stop(t + dec + 0.05);
+  }
+  function note(step, base) { var oct = Math.floor(step / 5), k = ((step % 5) + 5) % 5; return (base || 523.25) * Math.pow(2, (PENTA[k] + 12 * oct) / 12); }
+  var A = {
+    init: init,
+    get muted() { return muted; },
+    toggleMute: function () { muted = !muted; try { localStorage.setItem('melt.muted', muted ? '1' : '0'); } catch (e) {} if (master) master.gain.value = muted ? 0 : 0.8; return muted; },
+    melt: function (n) { if (!ctx) return; var now = ctx.currentTime; if (now - lastMelt < 0.06) return; lastMelt = now; noise('bandpass', 2200 + Math.random() * 2400, 3, Math.min(0.25, 0.06 + n * 0.01), 0.05); if (Math.random() < 0.5) noise('bandpass', 900, 6, 0.08, 0.04, 0.02); },
+    drip: function (fx) { if (!ctx) return; var now = ctx.currentTime; if (now - lastDrip < 0.11) return; lastDrip = now; var step = Math.floor(fx * 9); var f = note(step, 523.25); tone(f, 'sine', 0.12, 0.22, 0, f * 1.02); tone(f * 2, 'sine', 0.03, 0.12); },
+    freeze: function (n) { if (!ctx) return; var now = ctx.currentTime; if (now - lastFreeze < 0.07) return; lastFreeze = now; var f = 1800 + Math.random() * 900; tone(f, 'triangle', Math.min(0.12, 0.04 + n * 0.006), 0.18); tone(f * 1.5, 'sine', 0.04, 0.3, 0.03); },
+    sizzle: function (level) { if (!sizzleGain) return; sizzleGain.gain.setTargetAtTime(Math.min(0.09, level * 0.004), ctx.currentTime, 0.05); },
+    hum: function (on) { if (!humGain) return; humGain.gain.setTargetAtTime(on ? 0.035 : 0, ctx.currentTime, 0.06); },
+    squeak: function () { tone(700, 'sine', 0.09, 0.12, 0, 1300); },
+    hop: function () { tone(300, 'sine', 0.1, 0.16, 0, 640); },
+    land: function () { noise('lowpass', 500, 1, 0.08, 0.06); },
+    flake: function () { [0, 2, 4, 7].forEach(function (s, i) { tone(note(s + 5, 659.25), 'sine', 0.09, 0.4, i * 0.06); }); },
+    flakeLost: function () { noise('highpass', 4000, 1, 0.15, 0.25); tone(880, 'sine', 0.06, 0.3, 0, 440); },
+    win: function () { [0, 2, 4, 5, 7, 10].forEach(function (s, i) { tone(note(s, 392), 'triangle', 0.11, 0.45, i * 0.09); tone(note(s, 784), 'sine', 0.04, 0.4, i * 0.09); }); },
+    star: function (i) { tone(note(5 + i * 2, 523.25), 'triangle', 0.13, 0.5); tone(note(10 + i * 2, 523.25), 'sine', 0.05, 0.6, 0.02); },
+    fail: function () { [7, 4, 2, 0].forEach(function (s, i) { tone(note(s, 261.6), 'triangle', 0.1, 0.35, i * 0.11); }); },
+    click: function () { tone(1200, 'sine', 0.05, 0.05); },
+    rewind: function () { tone(500 + Math.random() * 300, 'square', 0.015, 0.04); }
+  };
+  root.MeltAudio = A;
+})(typeof self !== 'undefined' ? self : this);
+
+</script>
+<script>
+/* Melt — canvas renderer (visual only; reads sim state, never writes it). */
+(function (root) {
+  var T = root.MeltSim.T;
+  function hash(x, y) { var h = (x * 374761393 + y * 668265263) | 0; h = (h ^ (h >>> 13)) * 1274126177 | 0; return ((h ^ (h >>> 16)) >>> 0) / 4294967295; }
+  function R(canvas) {
+    this.c = canvas; this.g = canvas.getContext('2d');
+    this.dpr = 1; this.w = 0; this.h = 0; this.parts = []; this.flash = null; this.shake = 0; this.time = 0;
+    this.board = { x: 0, y: 0, cs: 8 }; this.top = 96; this.bottom = 74;
+    this.snow = []; for (var i = 0; i < 70; i++) this.snow.push({ x: Math.random(), y: Math.random(), s: 0.5 + Math.random() * 1.8, v: 0.01 + Math.random() * 0.03, p: Math.random() * 6 });
+    this.stars = []; for (var j = 0; j < 50; j++) this.stars.push({ x: Math.random(), y: Math.random() * 0.5, s: Math.random() * 1.3 + 0.3, p: Math.random() * 6 });
+  }
+  var P = R.prototype;
+  P.resize = function () {
+    var dpr = Math.min(root.devicePixelRatio || 1, 2.5), r = this.c.getBoundingClientRect();
+    this.dpr = dpr; this.w = r.width; this.h = r.height;
+    this.c.width = Math.round(r.width * dpr); this.c.height = Math.round(r.height * dpr);
+    if (this.sim) this.layout();
+  };
+  P.layout = function () {
+    var s = this.sim, availH = this.h - this.top - this.bottom, availW = this.w - 4;
+    // camera: crop the empty sky above the level's content
+    var minRow = s.H;
+    for (var i = 0; i < s.type.length; i++) if (s.type[i] || s.cold[i] || s.basin[i]) { minRow = (i / s.W) | 0; break; }
+    if (s.puck) minRow = Math.min(minRow, s.puck.y); if (s.den) minRow = Math.min(minRow, s.den.y); if (s.flake) minRow = Math.min(minRow, s.flake.y - 1);
+    var crop = Math.max(0, minRow - 12), hEff = s.H - crop;
+    var cs = Math.min(availW / s.W, availH / hEff);
+    this.crop = crop;
+    this.board = { cs: cs, x: (this.w - cs * s.W) / 2, y: this.top + (availH - cs * hEff) * 0.62 - crop * cs };
+    this.buildStatic();
+  };
+  P.setLevel = function (sim) {
+    this.sim = sim; this.parts = []; this.flash = new Float32Array(sim.W * sim.H); this.layout();
+  };
+  P.toSim = function (px, py) { var b = this.board; return { x: Math.floor((px - b.x) / b.cs), y: Math.floor((py - b.y) / b.cs) }; };
+  P.toPx = function (sx, sy) { var b = this.board; return { x: b.x + sx * b.cs, y: b.y + sy * b.cs }; };
+
+  P.buildStatic = function () {
+    var s = this.sim, b = this.board, cs = b.cs, dpr = this.dpr;
+    var oc = document.createElement('canvas'); oc.width = Math.ceil(s.W * cs * dpr); oc.height = Math.ceil(s.H * cs * dpr);
+    var g = oc.getContext('2d'); g.scale(dpr, dpr);
+    // cold zones
+    for (var y = 0; y < s.H; y++) for (var x = 0; x < s.W; x++) {
+      var i = y * s.W + x;
+      if (s.cold[i]) {
+        g.fillStyle = 'rgba(110,190,255,0.16)'; g.fillRect(x * cs, y * cs, cs + 0.5, cs + 0.5);
+        var edge = (x > 0 && !s.cold[i - 1]) || (x < s.W - 1 && !s.cold[i + 1]) || (y > 0 && !s.cold[i - s.W]);
+        if (edge) { g.fillStyle = 'rgba(160,220,255,0.22)'; g.fillRect(x * cs, y * cs, cs, cs); }
+      }
+      if (s.basin[i]) {
+        g.fillStyle = 'rgba(255,220,140,0.07)'; g.fillRect(x * cs, y * cs, cs + 0.5, cs + 0.5);
+      }
+    }
+    // rock
+    for (var y2 = 0; y2 < s.H; y2++) for (var x2 = 0; x2 < s.W; x2++) {
+      var t = s.type[y2 * s.W + x2];
+      if (t !== T.ROCK && t !== T.DRAIN && t !== T.FROST) continue;
+      var hv = hash(Math.floor(x2 / 3), Math.floor(y2 / 3)), hv2 = hash(x2, y2);
+      var depth = 0; for (var k = 1; k <= 6; k++) { if (y2 - k >= 0 && s.type[(y2 - k) * s.W + x2] === T.ROCK) depth++; else break; }
+      var l = 24 + hv * 3 - depth * 1.1 + hv2 * 1.2;
+      if (t === T.ROCK) g.fillStyle = 'hsl(' + (212 + hv * 6) + ',24%,' + l + '%)';
+      else if (t === T.FROST) g.fillStyle = '#9fd8f5';
+      else g.fillStyle = '#1a2230';
+      g.fillRect(x2 * cs, y2 * cs, cs + 0.6, cs + 0.6);
+      var above = y2 > 0 ? s.type[(y2 - 1) * s.W + x2] : T.EMPTY;
+      if (t === T.ROCK && above !== T.ROCK && above !== T.DRAIN) {
+        // snow cap
+        g.fillStyle = 'rgba(240,248,255,0.95)'; g.fillRect(x2 * cs, y2 * cs - cs * 0.15, cs + 0.6, cs * (0.55 + hv2 * 0.25));
+        g.fillStyle = 'rgba(190,220,245,0.6)'; g.fillRect(x2 * cs, y2 * cs + cs * (0.4 + hv2 * 0.25), cs + 0.6, cs * 0.18);
+      }
+      if (t === T.DRAIN && x2 % 2 === 0) { g.fillStyle = '#4a5a70'; g.fillRect(x2 * cs, y2 * cs, cs * 0.5, cs); }
+    }
+    // basin outline + ticks
+    g.strokeStyle = 'rgba(255,214,120,0.75)'; g.lineWidth = Math.max(1.5, cs * 0.25); g.setLineDash([cs * 0.8, cs * 0.6]);
+    for (var y3 = 0; y3 < s.H; y3++) for (var x3 = 0; x3 < s.W; x3++) {
+      var j = y3 * s.W + x3; if (!s.basin[j]) continue;
+      if (y3 > 0 && !s.basin[j - s.W]) { g.beginPath(); g.moveTo(x3 * cs, y3 * cs); g.lineTo(x3 * cs + cs, y3 * cs); g.stroke(); }
+    }
+    g.setLineDash([]);
+    this.staticLayer = oc;
+  };
+
+  P.drawBackground = function (g) {
+    var w = this.w, h = this.h, t = this.time;
+    var bg = g.createLinearGradient(0, 0, 0, h);
+    bg.addColorStop(0, '#0d1a31'); bg.addColorStop(0.55, '#1d3a5f'); bg.addColorStop(1, '#3b6c93');
+    g.fillStyle = bg; g.fillRect(0, 0, w, h);
+    // aurora
+    g.save(); g.globalAlpha = 0.18;
+    for (var a = 0; a < 2; a++) {
+      g.beginPath();
+      for (var x = 0; x <= w; x += 12) { var y = h * (0.16 + a * 0.08) + Math.sin(x * 0.012 + t * 0.25 + a * 2) * 22 + Math.sin(x * 0.031 + t * 0.4) * 8; if (x === 0) g.moveTo(x, y); else g.lineTo(x, y); }
+      g.lineTo(w, 0); g.lineTo(0, 0); g.closePath();
+      var ag = g.createLinearGradient(0, 0, 0, h * 0.35); ag.addColorStop(0, 'rgba(0,0,0,0)'); ag.addColorStop(1, a ? '#7affd2' : '#7ab8ff');
+      g.fillStyle = ag; g.fill();
+    }
+    g.restore();
+    for (var i = 0; i < this.stars.length; i++) { var s = this.stars[i]; g.globalAlpha = 0.4 + 0.4 * Math.sin(t * 1.5 + s.p); g.fillStyle = '#fff'; g.fillRect(s.x * w, s.y * h, s.s, s.s); }
+    g.globalAlpha = 1;
+    // mountains
+    var mc = ['rgba(120,160,200,0.20)', 'rgba(160,200,235,0.22)'];
+    for (var m = 0; m < 2; m++) {
+      g.fillStyle = mc[m]; g.beginPath(); g.moveTo(0, h);
+      for (var x2 = 0; x2 <= w; x2 += 8) { var yy = h * (0.52 + m * 0.12) - Math.abs(Math.sin(x2 * (0.006 + m * 0.004) + m)) * h * (0.16 - m * 0.04) - Math.sin(x2 * 0.05) * 4; g.lineTo(x2, yy); }
+      g.lineTo(w, h); g.closePath(); g.fill();
+    }
+  };
+  P.drawSnow = function (g, dt) {
+    var w = this.w, h = this.h;
+    g.fillStyle = 'rgba(255,255,255,0.55)';
+    for (var i = 0; i < this.snow.length; i++) {
+      var s = this.snow[i]; s.y += s.v * dt; s.x += Math.sin(this.time * 0.6 + s.p) * 0.0006; if (s.y > 1) { s.y = -0.02; s.x = Math.random(); }
+      g.beginPath(); g.arc(s.x * w, s.y * h, s.s, 0, 6.283); g.fill();
+    }
+  };
+
+  P.spawn = function (ev, sim) {
+    var W = sim.W, cs = this.board.cs, self = this;
+    var m = ev.melt;
+    for (var k = 0; k < m.length; k++) {
+      var i = m[k], x = i % W, y = (i / W) | 0, p = this.toPx(x + 0.5, y + 0.5);
+      if (k % 2 === 0) this.parts.push({ k: 'drop', x: p.x, y: p.y, vx: (Math.random() - 0.5) * 30, vy: -Math.random() * 40, life: 0.6 + Math.random() * 0.4, t: 0, r: cs * (0.18 + Math.random() * 0.15) });
+      if (k % 3 === 0) this.parts.push({ k: 'steam', x: p.x, y: p.y, vx: (Math.random() - 0.5) * 12, vy: -20 - Math.random() * 30, life: 1 + Math.random() * 0.8, t: 0, r: cs * (0.6 + Math.random() * 0.8) });
+    }
+    var f = ev.freeze;
+    for (var q = 0; q < f.length; q++) {
+      var j = f[q]; this.flash[j] = 1;
+      if (q % 3 === 0) { var x2 = j % W, y2 = (j / W) | 0, pp = this.toPx(x2 + 0.5, y2 + 0.5); this.parts.push({ k: 'spark', x: pp.x, y: pp.y, vx: 0, vy: -6, life: 0.7, t: 0, r: cs * (0.6 + Math.random() * 0.6), a: Math.random() * 3 }); }
+    }
+    if (f.length > 14) this.shake = Math.max(this.shake, 2);
+  };
+  P.steamAt = function (px, py, n) {
+    for (var i = 0; i < n; i++) this.parts.push({ k: 'steam', x: px + (Math.random() - 0.5) * 20, y: py + (Math.random() - 0.5) * 10, vx: (Math.random() - 0.5) * 14, vy: -25 - Math.random() * 25, life: 0.8 + Math.random() * 0.6, t: 0, r: this.board.cs * (0.5 + Math.random()) });
+  };
+  P.burst = function (px, py, color, n) {
+    for (var i = 0; i < n; i++) { var a = Math.random() * 6.283, v = 40 + Math.random() * 90; this.parts.push({ k: 'bit', x: px, y: py, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 30, life: 0.7 + Math.random() * 0.5, t: 0, r: 1.5 + Math.random() * 2.5, c: color }); }
+  };
+  P.updateParts = function (g, dt) {
+    var out = [];
+    for (var i = 0; i < this.parts.length; i++) {
+      var p = this.parts[i]; p.t += dt; if (p.t >= p.life) continue; out.push(p);
+      var u = p.t / p.life;
+      if (p.k === 'drop') { p.vy += 380 * dt; p.x += p.vx * dt; p.y += p.vy * dt; g.fillStyle = 'rgba(170,225,255,' + (0.9 * (1 - u)) + ')'; g.beginPath(); g.ellipse(p.x, p.y, p.r, p.r * 1.4, 0, 0, 6.283); g.fill(); }
+      else if (p.k === 'steam') { p.x += p.vx * dt; p.y += p.vy * dt; p.vy *= 0.985; var r = p.r * (1 + u * 2.2); g.fillStyle = 'rgba(235,245,255,' + (0.28 * (1 - u)) + ')'; g.beginPath(); g.arc(p.x, p.y, r, 0, 6.283); g.fill(); }
+      else if (p.k === 'spark') {
+        p.y += p.vy * dt; var rr = p.r * (0.5 + u), al = 1 - u; g.strokeStyle = 'rgba(255,255,255,' + al + ')'; g.lineWidth = 1.2;
+        g.save(); g.translate(p.x, p.y); g.rotate(p.a + u);
+        for (var a = 0; a < 3; a++) { g.rotate(1.047); g.beginPath(); g.moveTo(-rr, 0); g.lineTo(rr, 0); g.stroke(); }
+        g.restore();
+      }
+      else if (p.k === 'bit') { p.vy += 200 * dt; p.x += p.vx * dt; p.y += p.vy * dt; g.fillStyle = p.c; g.globalAlpha = 1 - u; g.fillRect(p.x, p.y, p.r, p.r); g.globalAlpha = 1; }
+    }
+    this.parts = out;
+  };
+
+  P.drawCells = function (g, sim) {
+    var W = sim.W, H = sim.H, cs = this.board.cs, t = sim.type, heat = sim.heat, chill = sim.chill, fl = this.flash, time = this.time;
+    var meltT = root.MeltSim.CFG.melt;
+    // water layer (soft): build an alpha mask, draw smoothed
+    if (!this.wc || this.wc.width !== W) { this.wc = document.createElement('canvas'); this.wc.width = W; this.wc.height = H; this.wctx = this.wc.getContext('2d'); this.wimg = this.wctx.createImageData(W, H); }
+    var d = this.wimg.data;
+    for (var i = 0; i < W * H; i++) {
+      var o = i * 4;
+      if (t[i] === T.WATER) {
+        var c = chill[i] / 40; if (c > 1) c = 1;
+        d[o] = 70 + c * 120; d[o + 1] = 170 + c * 60; d[o + 2] = 255; d[o + 3] = 205;
+      } else d[o + 3] = 0;
+    }
+    this.wctx.putImageData(this.wimg, 0, 0);
+    g.save(); g.imageSmoothingEnabled = true; g.imageSmoothingQuality = 'high';
+    g.drawImage(this.wc, 0, 0, W * cs, H * cs);
+    g.restore();
+    // water surface highlights + ice
+    for (var y = 0; y < H; y++) for (var x = 0; x < W; x++) {
+      var j = y * W + x, tt = t[j], px = x * cs, py = y * cs;
+      if (tt === T.WATER) {
+        if (y > 0 && t[j - W] === T.EMPTY) { g.fillStyle = 'rgba(230,250,255,0.75)'; g.fillRect(px, py + Math.sin(time * 6 + x * 0.9) * cs * 0.12, cs + 0.5, Math.max(1, cs * 0.22)); }
+        continue;
+      }
+      if (tt !== T.ICE && tt !== T.NEWICE && tt !== T.THICK) continue;
+      var hv = hash(x, y), h = heat[j] / (tt === T.THICK ? 150 : meltT);
+      var base;
+      if (tt === T.ICE) base = [168 + hv * 20, 222 + hv * 14, 250, 0.9];
+      else if (tt === T.NEWICE) base = [214 + hv * 16, 238 + hv * 10, 255, 0.92];
+      else base = [70 + hv * 14, 130 + hv * 16, 200, 0.95];
+      var r = base[0] + (255 - base[0]) * h, gg = base[1] + (215 - base[1]) * h * 0.6, b = base[2] - 60 * h;
+      g.fillStyle = 'rgba(' + (r | 0) + ',' + (gg | 0) + ',' + (b | 0) + ',' + base[3] + ')';
+      g.fillRect(px, py, cs + 0.5, cs + 0.5);
+      var up = y > 0 ? t[j - W] : 0, lf = x > 0 ? t[j - 1] : 0, rt = x < W - 1 ? t[j + 1] : 0, dn = y < H - 1 ? t[j + W] : 0;
+      function open(v) { return v === T.EMPTY || v === T.WATER; }
+      if (open(up)) { g.fillStyle = 'rgba(255,255,255,0.85)'; g.fillRect(px, py, cs + 0.5, Math.max(1, cs * 0.25)); }
+      if (open(lf)) { g.fillStyle = 'rgba(255,255,255,0.4)'; g.fillRect(px, py, Math.max(1, cs * 0.18), cs + 0.5); }
+      if (open(rt)) { g.fillStyle = 'rgba(40,90,140,0.25)'; g.fillRect(px + cs * 0.82, py, cs * 0.18, cs + 0.5); }
+      if (open(dn)) { g.fillStyle = 'rgba(40,90,140,0.3)'; g.fillRect(px, py + cs * 0.8, cs + 0.5, cs * 0.2); }
+      if (tt === T.ICE && hv > 0.82) { g.fillStyle = 'rgba(255,255,255,0.35)'; g.fillRect(px + cs * 0.3, py + cs * 0.3, cs * 0.25, cs * 0.25); }
+      if (tt === T.THICK && hv > 0.7) { g.fillStyle = 'rgba(20,50,100,0.35)'; g.fillRect(px + cs * 0.2, py + cs * 0.5, cs * 0.6, cs * 0.14); }
+      if (h > 0.35) { // cracks
+        g.strokeStyle = 'rgba(255,255,255,' + (h * 0.9) + ')'; g.lineWidth = 1;
+        g.beginPath(); var a = hv * 6.283; g.moveTo(px + cs / 2, py + cs / 2); g.lineTo(px + cs / 2 + Math.cos(a) * cs * 0.7, py + cs / 2 + Math.sin(a) * cs * 0.7); g.stroke();
+      }
+      if (fl[j] > 0) { g.fillStyle = 'rgba(255,255,255,' + fl[j] + ')'; g.fillRect(px - 0.5, py - 0.5, cs + 1, cs + 1); }
+    }
+    for (var q = 0; q < fl.length; q++) if (fl[q] > 0) fl[q] = Math.max(0, fl[q] - 0.06);
+  };
+
+  P.drawDen = function (g, sim) {
+    if (!sim.den) return;
+    var cs = this.board.cs, p = { x: sim.den.x * cs, y: sim.den.y * cs }, w = cs * 3;
+    var cx = p.x + w / 2, by = p.y + w, r = w * 0.62;
+    g.save();
+    var glow = g.createRadialGradient(cx, by - r * 0.3, 2, cx, by - r * 0.3, r * 2.2); glow.addColorStop(0, 'rgba(255,200,120,0.35)'); glow.addColorStop(1, 'rgba(255,200,120,0)');
+    g.fillStyle = glow; g.fillRect(cx - r * 2.2, by - r * 2.5, r * 4.4, r * 2.6);
+    g.fillStyle = '#e8f4fc'; g.beginPath(); g.arc(cx, by, r, Math.PI, 0); g.closePath(); g.fill();
+    g.strokeStyle = 'rgba(120,170,210,0.7)'; g.lineWidth = 1;
+    for (var k = 1; k < 3; k++) { g.beginPath(); g.arc(cx, by, r, Math.PI + 0, 0); g.stroke(); g.beginPath(); g.moveTo(cx - r * Math.cos(k * 0.5), by - r * k * 0.33); g.lineTo(cx + r * Math.cos(k * 0.5), by - r * k * 0.33); g.stroke(); }
+    g.fillStyle = '#2a1f2e'; g.beginPath(); g.arc(cx, by, r * 0.42, Math.PI, 0); g.closePath(); g.fill();
+    g.fillStyle = 'rgba(255,190,110,0.8)'; g.beginPath(); g.arc(cx, by, r * 0.3, Math.PI, 0); g.closePath(); g.fill();
+    // flag
+    g.strokeStyle = '#6b4a3a'; g.lineWidth = 1.5; g.beginPath(); g.moveTo(cx + r * 0.55, by - r * 0.75); g.lineTo(cx + r * 0.55, by - r * 1.55); g.stroke();
+    g.fillStyle = '#e2574c'; g.beginPath(); var wv = Math.sin(this.time * 4) * 2; g.moveTo(cx + r * 0.55, by - r * 1.55); g.lineTo(cx + r * 1.1, by - r * 1.4 + wv); g.lineTo(cx + r * 0.55, by - r * 1.25); g.fill();
+    g.restore();
+  };
+
+  P.drawFlake = function (g, sim) {
+    var f = sim.flake; if (!f || !f.alive || f.taken) return;
+    var cs = this.board.cs, x = (f.x + 0.5) * cs, y = (f.y + 0.5) * cs, r = cs * 1.3, t = this.time;
+    var tremble = f.heat > 0 ? (Math.random() - 0.5) * 2.5 : 0;
+    g.save(); g.translate(x + tremble, y + Math.sin(t * 2) * 1.5); g.rotate(t * 0.6);
+    var gl = g.createRadialGradient(0, 0, 0, 0, 0, r * 2); gl.addColorStop(0, 'rgba(200,240,255,0.55)'); gl.addColorStop(1, 'rgba(200,240,255,0)');
+    g.fillStyle = gl; g.beginPath(); g.arc(0, 0, r * 2, 0, 6.283); g.fill();
+    g.strokeStyle = f.heat > 0 ? '#ffe7c4' : '#ffffff'; g.lineWidth = Math.max(1.4, cs * 0.22); g.lineCap = 'round';
+    for (var a = 0; a < 6; a++) {
+      g.rotate(1.0472); g.beginPath(); g.moveTo(0, 0); g.lineTo(0, -r); g.moveTo(0, -r * 0.55); g.lineTo(-r * 0.3, -r * 0.8); g.moveTo(0, -r * 0.55); g.lineTo(r * 0.3, -r * 0.8); g.stroke();
+    }
+    g.restore();
+  };
+
+  P.drawPuck = function (g, sim, lerp) {
+    var pk = sim.puck; if (!pk) return;
+    var cs = this.board.cs, t = this.time;
+    var px = (lerp ? lerp.x : pk.x) * cs, py = (lerp ? lerp.y : pk.y) * cs, w = cs * 3;
+    var mode = pk.mode, dir = pk.dir;
+    var bob = (mode === 'walk') ? Math.abs(Math.sin(t * 12)) * cs * 0.35 : 0;
+    var lean = (mode === 'walk' && pk.onIce) ? 0.18 * dir : (mode === 'walk' ? Math.sin(t * 12) * 0.08 : 0);
+    var shiver = (mode === 'edge' || mode === 'dead') ? Math.sin(t * 50) * 0.8 : 0;
+    var cx = px + w / 2 + shiver, cy = py + w * 0.58 - bob;
+    g.save(); g.translate(cx, py + w); g.scale(1.22, 1.22); g.translate(-cx, -(py + w)); g.translate(cx, cy + w * 0.4); g.rotate(lean); g.translate(0, -w * 0.4);
+    if (mode === 'fall') g.scale(0.92, 1.08);
+    var rw = w * 0.56, rh = w * 0.46;
+    // shadow
+    g.fillStyle = 'rgba(0,20,40,0.25)'; g.beginPath(); g.ellipse(0, w * 0.42 + bob, rw * 0.9, w * 0.07, 0, 0, 6.283); g.fill();
+    // body
+    var bg = g.createLinearGradient(0, -rh, 0, rh); bg.addColorStop(0, '#f6f9fc'); bg.addColorStop(1, '#c9d6e2');
+    g.fillStyle = bg; g.beginPath(); g.ellipse(0, 0, rw, rh, 0, 0, 6.283); g.fill();
+    g.fillStyle = 'rgba(150,170,195,0.5)'; g.beginPath(); g.ellipse(-dir * rw * 0.35, -rh * 0.2, rw * 0.12, rh * 0.09, 0, 0, 6.283); g.fill();
+    // flippers
+    var fl = (mode === 'walk') ? Math.sin(t * 12) * 0.5 : (mode === 'fall' ? -1.2 : 0.2);
+    g.fillStyle = '#b5c4d3';
+    g.save(); g.translate(-rw * 0.55, rh * 0.35); g.rotate(0.6 + fl); g.beginPath(); g.ellipse(0, 0, rw * 0.28, rh * 0.14, 0, 0, 6.283); g.fill(); g.restore();
+    g.save(); g.translate(rw * 0.55, rh * 0.35); g.rotate(-0.6 - fl); g.beginPath(); g.ellipse(0, 0, rw * 0.28, rh * 0.14, 0, 0, 6.283); g.fill(); g.restore();
+    // scarf
+    g.fillStyle = '#e2574c'; g.beginPath(); g.ellipse(0, rh * 0.12, rw * 0.78, rh * 0.16, 0, 0, 6.283); g.fill();
+    var sw = Math.sin(t * 7) * rh * 0.12;
+    g.beginPath(); g.moveTo(-dir * rw * 0.4, rh * 0.16); g.lineTo(-dir * rw * 1.05, rh * 0.32 + sw); g.lineTo(-dir * rw * 0.95, rh * 0.52 + sw); g.lineTo(-dir * rw * 0.3, rh * 0.3); g.fill();
+    g.fillStyle = '#ffd36e'; g.fillRect(-rw * 0.5, rh * 0.06, rw * 0.12, rh * 0.12); g.fillRect(rw * 0.2, rh * 0.06, rw * 0.12, rh * 0.12);
+    // face
+    var blink = (Math.sin(t * 1.3) > 0.985) || mode === 'home';
+    var ex = dir * rw * 0.22, ey = -rh * 0.28, es = rw * 0.13;
+    g.fillStyle = '#1b2333';
+    if (blink) { g.fillRect(ex - es * 1.6 - es, ey, es * 1.6, es * 0.35); g.fillRect(ex + es * 1.6 - es * 0.6, ey, es * 1.6, es * 0.35); }
+    else {
+      g.beginPath(); g.arc(ex - es * 1.6, ey, es, 0, 6.283); g.arc(ex + es * 1.6, ey, es, 0, 6.283); g.fill();
+      g.fillStyle = '#fff'; g.beginPath(); g.arc(ex - es * 1.6 + es * 0.35, ey - es * 0.35, es * 0.35, 0, 6.283); g.arc(ex + es * 1.6 + es * 0.35, ey - es * 0.35, es * 0.35, 0, 6.283); g.fill();
+    }
+    g.fillStyle = '#2b2230'; g.beginPath(); g.ellipse(ex + dir * es * 0.4, ey + es * 1.5, es * 0.55, es * 0.38, 0, 0, 6.283); g.fill();
+    g.fillStyle = 'rgba(255,140,150,0.45)'; g.beginPath(); g.arc(ex - es * 2.8, ey + es * 1.6, es * 0.6, 0, 6.283); g.arc(ex + es * 2.8, ey + es * 1.6, es * 0.6, 0, 6.283); g.fill();
+    g.strokeStyle = 'rgba(40,40,60,0.5)'; g.lineWidth = 0.8;
+    g.beginPath(); g.moveTo(ex + dir * es * 1.2, ey + es * 1.6); g.lineTo(ex + dir * es * 3.2, ey + es * 1.2); g.moveTo(ex + dir * es * 1.2, ey + es * 1.9); g.lineTo(ex + dir * es * 3.2, ey + es * 2.1); g.stroke();
+    g.restore();
+    // bubbles
+    var bub = null;
+    if (mode === 'edge') bub = '?'; else if (mode === 'blocked') bub = '…'; else if (mode === 'home') bub = '♥'; else if (mode === 'wait') bub = null;
+    if (bub) {
+      var bx = px + w * 0.5 + dir * w * 0.5, byy = py - w * 0.25 + Math.sin(t * 3) * 2;
+      g.fillStyle = 'rgba(255,255,255,0.92)'; g.beginPath(); g.arc(bx, byy, w * 0.3, 0, 6.283); g.fill();
+      g.fillStyle = bub === '♥' ? '#e2574c' : '#22324a'; g.font = '800 ' + Math.round(w * 0.36) + 'px ui-rounded,system-ui,sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(bub, bx, byy + 1);
+    }
+    if (mode === 'dead' && sim.failReason.indexOf('frozen') >= 0) {
+      g.fillStyle = 'rgba(190,235,255,0.55)'; g.strokeStyle = 'rgba(255,255,255,0.9)'; g.lineWidth = 1.5;
+      g.fillRect(px - 2, py - 2, w + 4, w + 4); g.strokeRect(px - 2, py - 2, w + 4, w + 4);
+    }
+  };
+
+  P.drawLamp = function (g, lamp) {
+    if (!lamp) return;
+    var cs = this.board.cs, x = lamp.px, y = lamp.py, t = this.time;
+    if (lamp.on) {
+      var R = cs * 6.5 * (1 + Math.sin(t * 20) * 0.03);
+      g.save(); g.globalCompositeOperation = 'lighter';
+      var gr = g.createRadialGradient(x, y, 0, x, y, R); gr.addColorStop(0, 'rgba(255,190,90,0.55)'); gr.addColorStop(0.45, 'rgba(255,150,60,0.22)'); gr.addColorStop(1, 'rgba(255,120,40,0)');
+      g.fillStyle = gr; g.beginPath(); g.arc(x, y, R, 0, 6.283); g.fill(); g.restore();
+      g.strokeStyle = 'rgba(255,215,150,0.45)'; g.setLineDash([4, 5]); g.lineDashOffset = -t * 20; g.lineWidth = 1.2;
+      g.beginPath(); g.arc(x, y, cs * 4, 0, 6.283); g.stroke(); g.setLineDash([]);
+    }
+    // lamp body (above the heat point)
+    var s = Math.max(10, cs * 1.6);
+    g.save(); g.translate(x, y - s * 1.4);
+    g.globalAlpha = lamp.on ? 1 : 0.35;
+    g.fillStyle = '#c98b3a'; g.beginPath(); g.moveTo(-s * 0.9, 0); g.lineTo(s * 0.9, 0); g.lineTo(s * 0.5, -s * 0.9); g.lineTo(-s * 0.5, -s * 0.9); g.closePath(); g.fill();
+    g.fillStyle = '#7a5226'; g.fillRect(-s * 0.15, -s * 1.5, s * 0.3, s * 0.6);
+    g.fillStyle = lamp.on ? '#fff3c4' : '#ddd'; g.beginPath(); g.arc(0, s * 0.1, s * 0.45, 0, Math.PI); g.fill();
+    if (lamp.on) { g.fillStyle = 'rgba(255,230,160,0.35)'; g.beginPath(); g.moveTo(-s * 0.8, 0); g.lineTo(s * 0.8, 0); g.lineTo(s * 0.35, s * 1.2); g.lineTo(-s * 0.35, s * 1.2); g.fill(); }
+    g.restore();
+  };
+
+  P.frame = function (sim, view, dt) {
+    var g = this.g; this.time += dt;
+    g.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+    this.drawBackground(g);
+    this.drawSnow(g, dt);
+    if (!sim) return;
+    var b = this.board, sx = 0, sy = 0;
+    if (this.shake > 0) { sx = (Math.random() - 0.5) * this.shake * 2; sy = (Math.random() - 0.5) * this.shake * 2; this.shake = Math.max(0, this.shake - dt * 12); }
+    g.save(); g.translate(b.x + sx, b.y + sy);
+    // board backdrop
+    g.fillStyle = 'rgba(8,20,40,0.22)'; var ct = (this.crop || 0) * b.cs; g.fillRect(-2, ct - 4, sim.W * b.cs + 4, sim.H * b.cs - ct + 6);
+    // cold-zone shimmer
+    g.drawImage(this.staticLayer, 0, 0, sim.W * b.cs, sim.H * b.cs);
+    this.drawDen(g, sim);
+    this.drawCells(g, sim);
+    this.drawFlake(g, sim);
+    this.drawPuck(g, sim, view.puck);
+    g.restore();
+    g.save(); g.translate(sx, sy); this.updateParts(g, dt); g.restore();
+    if (view.tutorial) {
+      var tp = this.toPx(view.tutorial.x, view.tutorial.y), ph = (this.time % 1.4) / 1.4;
+      g.strokeStyle = 'rgba(255,220,150,' + (1 - ph) + ')'; g.lineWidth = 3; g.beginPath(); g.arc(tp.x, tp.y, 10 + ph * 30, 0, 6.283); g.stroke();
+      g.fillStyle = 'rgba(255,236,190,0.9)'; g.beginPath(); g.arc(tp.x, tp.y, 9, 0, 6.283); g.fill();
+      g.fillStyle = '#fff'; g.font = '800 14px ui-rounded,system-ui,sans-serif'; g.textAlign = 'center'; g.fillText('touch & hold', tp.x, tp.y - 46);
+    }
+    this.drawLamp(g, view.lamp);
+    if (view.rewinding) {
+      g.fillStyle = 'rgba(120,190,255,0.12)'; g.fillRect(0, 0, this.w, this.h);
+      g.fillStyle = 'rgba(255,255,255,0.06)'; for (var y = (this.time * 300) % 6; y < this.h; y += 6) g.fillRect(0, y, this.w, 1);
+    }
+  };
+  root.MeltRenderer = R;
+})(typeof self !== 'undefined' ? self : this);
+
+</script>
+<script>
+/* Melt — game shell: screens, input, fixed-step loop, rewind, HUD, progress. */
+(function () {
+  'use strict';
+  var Sim = MeltSim.Sim, CFG = MeltSim.CFG, A = MeltAudio, LEVELS = MELT_LEVELS;
+  var $ = function (id) { return document.getElementById(id); };
+  var canvas = $('game'), R = new MeltRenderer(canvas);
+  var STEP = 1 / CFG.tickHz, SNAP_EVERY = 5, SNAP_MAX = 120; // 20 s of history
+  var TOUCH_OFFSET = 62; // lamp floats above the fingertip
+  var S = {
+    screen: 'title', level: 0, sim: null, acc: 0, last: 0, input: { on: false, x: 0, y: 0 }, pointer: null,
+    lamp: null, snaps: [], rewinding: false, rewindHold: 0, ended: false, prevPuck: null, puck: null, flakeState: '', intro: 0, demo: null
+  };
+  // ---------- progress ----------
+  var PKEY = 'melt.progress.v1', prog = { stars: [] };
+  try { var raw = localStorage.getItem(PKEY); if (raw) prog = JSON.parse(raw) || prog; } catch (e) {}
+  function save() { try { localStorage.setItem(PKEY, JSON.stringify(prog)); } catch (e) {} }
+  function starsOf(i) { return prog.stars[i] || 0; }
+  function unlocked(i) { return i < 2 || starsOf(i - 1) > 0 || starsOf(i - 2) > 0; }
+  function totalStars() { var n = 0; for (var i = 0; i < LEVELS.length; i++) n += starsOf(i); return n; }
+  function meta(i) { return MeltSim.parseLevel(LEVELS[i]).meta; }
+
+  // ---------- screens ----------
+  function show(name) {
+    S.screen = name;
+    ['title', 'select', 'hud'].forEach(function (id) { $(id).classList.toggle('hidden', id !== name && !(id === 'hud' && name === 'play')); });
+    if (name !== 'play') hideModal();
+    if (name === 'select') buildSelect();
+    if (name === 'title' || name === 'select') startDemo();
+  }
+  function buildSelect() {
+    var grid = $('levelGrid'); grid.innerHTML = '';
+    var firstOpen = -1;
+    for (var i = 0; i < LEVELS.length; i++) {
+      var m = meta(i), st = starsOf(i), open = unlocked(i);
+      if (open && !st && firstOpen < 0) firstOpen = i;
+      var b = document.createElement('button'); b.className = 'lv' + (open ? '' : ' locked');
+      b.innerHTML = '<div class="n">' + (open ? (i + 1) : '&#128274;') + '</div><div class="nm">' + m.name + '</div><div class="st">' +
+        [0, 1, 2].map(function (k) { return '<span class="' + (k < st ? '' : 'off') + '">&#9733;</span>'; }).join('') + '</div>';
+      (function (idx, o) { b.onclick = function () { A.init(); A.click(); if (o) startLevel(idx); }; })(i, open);
+      b.dataset.idx = i; grid.appendChild(b);
+    }
+    if (firstOpen >= 0) grid.children[firstOpen].classList.add('next');
+    $('selStars').innerHTML = totalStars() + ' / ' + LEVELS.length * 3 + ' &#9733;';
+  }
+
+  // ---------- level lifecycle ----------
+  function startLevel(i) {
+    S.demo = null; hideModal(); S.token = (S.token || 0) + 1;
+    S.level = i; S.sim = new Sim(LEVELS[i]); S.snaps = []; S.acc = 0; S.ended = false; S.rewinding = false;
+    S.input = { on: false, x: 0, y: 0 }; S.lamp = null; S.prevPuck = null; S.flakeState = ''; S.stuck = 0; S.stuckShown = false; S.touched = false;
+    var tm = (LEVELS[i].match(/tap: *([\d.]+), *([\d.]+)/)); S.tutorial = tm ? { x: parseFloat(tm[1]) * 3 + 1.5, y: parseFloat(tm[2]) * 3 + 1.5 } : null;
+    R.setLevel(S.sim);
+    show('play');
+    var m = S.sim.meta;
+    $('hudWorld').textContent = 'World 1 · ' + (i + 1) + '/' + LEVELS.length;
+    $('hudName').textContent = m.name;
+    $('basinMeter').classList.toggle('hidden', S.sim.goals.indexOf('basin') < 0);
+    $('flakeIco').className = 'flake-ico' + (S.sim.flake ? '' : ' hidden');
+    var par = parseFloat(m.par || '3');
+    S.thermoMax = Math.max(par * 2, par + 2);
+    $('thermoPar').style.left = (par / S.thermoMax * 100) + '%';
+    toast(m.hint || '', 4200);
+    snap();
+  }
+  function snap() { S.snaps.push(S.sim.snapshot()); if (S.snaps.length > SNAP_MAX) S.snaps.shift(); }
+  var toastT = 0;
+  function toast(text, ms) { var t = $('toast'); if (!text) { t.classList.remove('show'); return; } t.textContent = text; t.classList.add('show'); clearTimeout(toastT); toastT = setTimeout(function () { t.classList.remove('show'); }, ms || 2500); }
+
+  // ---------- input ----------
+  function pointerPos(e) { var r = canvas.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; }
+  function setLampFromPointer(e) {
+    var p = pointerPos(e), off = e.pointerType === 'mouse' ? 0 : TOUCH_OFFSET;
+    S.lamp = { px: p.x, py: p.y - off, on: true };
+    var c = R.toSim(S.lamp.px, S.lamp.py);
+    S.input.x = c.x; S.input.y = c.y;
+  }
+  canvas.addEventListener('pointerdown', function (e) {
+    A.init();
+    if (S.screen !== 'play' || S.ended || S.rewinding) return;
+    S.pointer = e.pointerId; try { canvas.setPointerCapture(e.pointerId); } catch (er) {}
+    S.input.on = true; S.touched = true; setLampFromPointer(e); A.hum(true);
+    e.preventDefault();
+  });
+  canvas.addEventListener('pointermove', function (e) { if (S.pointer === e.pointerId && S.input.on) setLampFromPointer(e); });
+  function up(e) { if (S.pointer !== e.pointerId) return; S.pointer = null; S.input.on = false; if (S.lamp) S.lamp.on = false; A.hum(false); A.sizzle(0); }
+  canvas.addEventListener('pointerup', up); canvas.addEventListener('pointercancel', up);
+  document.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+
+  // ---------- buttons ----------
+  $('btnPlay').onclick = function () { A.init(); A.click(); var n = 0; while (n < LEVELS.length - 1 && starsOf(n) > 0) n++; startLevel(n); };
+  $('btnLevels').onclick = function () { A.init(); A.click(); show('select'); };
+  $('btnHome').onclick = function () { A.click(); show('title'); };
+  $('btnBack').onclick = function () { A.click(); A.hum(false); A.sizzle(0); show('select'); };
+  $('btnRestart').onclick = function () { A.click(); startLevel(S.level); };
+  function syncMute() { $('btnMute').innerHTML = A.muted ? '&#128263;' : '&#9834;'; }
+  $('btnMute').onclick = function () { A.init(); A.toggleMute(); syncMute(); }; syncMute();
+  var rw = $('btnRewind');
+  function rwStart(e) { e.preventDefault(); A.init(); if (S.screen !== 'play') return; S.rewinding = true; S.rewindHold = 0; rw.classList.add('on'); S.input.on = false; if (S.lamp) S.lamp.on = false; A.hum(false); A.sizzle(0); if (S.ended) { S.ended = false; hideModal(); } }
+  function rwEnd() { if (!S.rewinding) return; S.rewinding = false; rw.classList.remove('on'); }
+  rw.addEventListener('pointerdown', rwStart); rw.addEventListener('pointerup', rwEnd); rw.addEventListener('pointerleave', rwEnd); rw.addEventListener('pointercancel', rwEnd);
+  function rewindBy(n) {
+    for (var k = 0; k < n && S.snaps.length > 1; k++) S.snaps.pop();
+    if (S.snaps.length) { S.sim.restore(S.snaps[S.snaps.length - 1]); S.prevPuck = null; }
+    S.flakeState = '';
+  }
+
+  // ---------- modal ----------
+  function hideModal() { $('modal').classList.add('hidden'); }
+  function modal(title, starsN, bodyHtml, buttons) {
+    $('mTitle').textContent = title;
+    var st = $('mStars'); st.style.display = starsN === null ? 'none' : '';
+    var spans = st.children; for (var i = 0; i < 3; i++) spans[i].className = '';
+    if (starsN) for (var k = 0; k < starsN; k++) (function (k) { setTimeout(function () { spans[k].className = 'on'; A.star(k); }, 350 + k * 330); })(k);
+    $('mBody').innerHTML = bodyHtml;
+    var mb = $('mButtons'); mb.innerHTML = '';
+    buttons.forEach(function (b) { var el = document.createElement('button'); el.className = b.primary ? 'cta' : 'pill'; el.innerHTML = b.label; el.onclick = function () { A.click(); b.fn(); }; mb.appendChild(el); });
+    $('modal').classList.remove('hidden');
+  }
+  var WIN_TITLES = ['Nice drip.', 'Cool!', 'Ice work.', 'Smooth slide.', 'Thawsome!'];
+  function onWin() {
+    S.ended = true; A.hum(false); A.sizzle(0);
+    var sim = S.sim, stars = sim.stars(), par = parseFloat(sim.meta.par || '3'), lamp = sim.lampTicks / CFG.tickHz;
+    var best = Math.max(starsOf(S.level), stars); prog.stars[S.level] = best; save();
+    A.win();
+    var pc = R.toPx(sim.puck ? sim.puck.x + 1.5 : sim.W / 2, sim.puck ? sim.puck.y : sim.H / 2);
+    R.burst(pc.x, pc.y, '#ffd36e', 30); R.burst(pc.x, pc.y, '#bfe8ff', 30);
+    var hasNext = S.level < LEVELS.length - 1, tok = S.token;
+    setTimeout(function () {
+      if (tok !== S.token) return;
+      modal(WIN_TITLES[S.level % WIN_TITLES.length], stars,
+        '<div class="row"><span>&#9733; Cleared</span><span>&#10003;</span></div>' +
+        '<div class="row"><span>&#9733; Lamp time ' + lamp.toFixed(1) + 's / par ' + par.toFixed(1) + 's</span><span>' + (lamp <= par ? '&#10003;' : '&#10007;') + '</span></div>' +
+        (sim.flake ? '<div class="row"><span>&#9733; Snowflake kept</span><span>' + (sim.flake.alive ? '&#10003;' : '&#10007;') + '</span></div>' : ''),
+        [{ label: '&#8635;', fn: function () { startLevel(S.level); } }, { label: 'Levels', fn: function () { show('select'); } }].concat(
+          hasNext ? [{ label: 'Next &#9654;', primary: true, fn: function () { startLevel(S.level + 1); } }] : [{ label: 'World 1 done!', primary: true, fn: function () { show('select'); } }]));
+    }, 900);
+  }
+  function onFail() {
+    S.ended = true; A.hum(false); A.sizzle(0); A.fail(); R.shake = 6;
+    var tok = S.token;
+    setTimeout(function () {
+      if (tok !== S.token || !S.ended) return;
+      modal('Oops!', null, S.sim.failReason + '<br><span class="small">Rewind a few seconds and try a different move.</span>',
+        [{ label: '&#9194; Rewind 3s', primary: true, fn: function () { hideModal(); S.ended = false; rewindBy(18); } },
+         { label: '&#8635; Retry', fn: function () { startLevel(S.level); } }]);
+    }, 650);
+  }
+
+  // ---------- events -> juice ----------
+  function juice(ev) {
+    var sim = S.sim;
+    if (ev.melt.length) {
+      R.spawn(ev, sim); A.melt(ev.melt.length);
+      var i = ev.melt[0]; A.drip((i % sim.W) / sim.W);
+      if (navigator.vibrate && ev.melt.length > 6) navigator.vibrate(4);
+    } else if (ev.freeze.length) R.spawn(ev, sim);
+    if (ev.freeze.length) { A.freeze(ev.freeze.length); if (navigator.vibrate && ev.freeze.length > 8) navigator.vibrate(8); }
+    if (ev.land > 0 && Math.random() < 0.25) A.drip(Math.random());
+    if (ev.sizzle && S.lamp && Math.random() < 0.3) R.steamAt(S.lamp.px, S.lamp.py, 1);
+    A.sizzle(ev.sizzle);
+    if (ev.puck === 'slide') A.squeak();
+    if (ev.puck === 'hop') A.hop();
+    if (ev.puck === 'land') A.land();
+    if (ev.puck === 'home') A.squeak();
+    if (ev.flake === 'take') { A.flake(); var f = sim.flake, p = R.toPx(f.x, f.y); R.burst(p.x, p.y, '#ffffff', 18); }
+    if (ev.flake === 'melt') { A.flakeLost(); var f2 = sim.flake, p2 = R.toPx(f2.x, f2.y); R.steamAt(p2.x, p2.y, 8); toast('The snowflake melted! Keep the lamp away from it.', 2200); }
+  }
+
+  // ---------- HUD ----------
+  function hud() {
+    var sim = S.sim; if (!sim) return;
+    var lamp = sim.lampTicks / CFG.tickHz, par = parseFloat(sim.meta.par || '3');
+    var f = $('thermoFill'); f.style.width = Math.min(100, lamp / S.thermoMax * 100) + '%'; f.classList.toggle('over', lamp > par);
+    $('thermoVal').textContent = lamp.toFixed(1) + 's';
+    if (sim.goals.indexOf('basin') >= 0) { var pct = Math.min(100, Math.round(sim.basinCount() / sim.basinTarget * 100)); $('basinFill').style.width = pct + '%'; $('basinVal').textContent = pct + '%'; }
+    if (sim.flake) { var st = !sim.flake.alive ? 'lost' : (sim.flake.taken ? 'got' : ''); if (st !== S.flakeState) { S.flakeState = st; $('flakeIco').className = 'flake-ico ' + st; } }
+  }
+
+  // ---------- title demo: a little self-playing scene ----------
+  var DEMO = 'name: demo\ngoal: den\n---\n' + [
+    '...............', '...............', '...............', '...............', '...............', '...............', '...............', '...............', '...............', '...............',
+    '...............', '...............', '...............', '....IIII.......', '....IIII.......', '...............', '.P...........D.', '#####***#######', '#####***#######', '###############'].join('\n');
+  function startDemo() { S.demo = { sim: new Sim(DEMO), t: 0 }; R.top = 260; R.bottom = 40; R.setLevel(S.demo.sim); R.top = 96; R.bottom = 74; S.sim = null; }
+  function demoInput(t) {
+    if (t > 40 && t < 80) return { on: true, x: 15 + Math.round(Math.sin(t * 0.2) * 3), y: 43 };
+    return { on: false, x: 0, y: 0 };
+  }
+
+  // ---------- main loop ----------
+  function frame(now) {
+    var dt = Math.min(0.05, (now - (S.last || now)) / 1000); S.last = now;
+    if (S.screen === 'play' && S.sim) {
+      var sim = S.sim;
+      if (S.rewinding) {
+        S.rewindHold += dt;
+        if (S.snaps.length > 1) { rewindBy(1); if (Math.random() < 0.5) A.rewind(); }
+      } else if (!S.ended) {
+        S.acc += dt;
+        while (S.acc >= STEP) {
+          S.acc -= STEP;
+          S.prevPuck = sim.puck ? { x: sim.puck.x, y: sim.puck.y } : null;
+          var ev = sim.step(S.input);
+          juice(ev);
+          if (sim.puck && (sim.puck.mode === 'edge' || sim.puck.mode === 'blocked') && !S.input.on && !ev.melt.length && !ev.freeze.length) S.stuck++; else S.stuck = 0;
+          if (S.stuck > 30 * 7 && !S.stuckShown) { S.stuckShown = true; toast('Puck is waiting for you. Melt more ice, or hold ⏪ to rewind.', 3500); }
+          if (sim.tick % SNAP_EVERY === 0) snap();
+          if (sim.state === 'win') { onWin(); break; }
+          if (sim.state === 'fail') { onFail(); break; }
+        }
+      }
+      var lerp = null;
+      if (sim.puck) { var a = S.acc / STEP, pp = S.prevPuck || sim.puck; lerp = { x: pp.x + (sim.puck.x - pp.x) * a, y: pp.y + (sim.puck.y - pp.y) * a }; }
+      R.frame(sim, { lamp: S.lamp, puck: lerp, rewinding: S.rewinding, tutorial: (S.tutorial && !S.touched) ? S.tutorial : null }, dt);
+      if (S.lamp && !S.lamp.on) { S.lamp.fade = (S.lamp.fade || 1) - dt * 2; if (S.lamp.fade <= 0) S.lamp = null; }
+      hud();
+    } else if (S.demo) {
+      var d = S.demo; d.acc = (d.acc || 0) + dt;
+      while (d.acc >= STEP) { d.acc -= STEP; var inp = demoInput(d.t); var e = d.sim.step(inp); if (e.melt.length || e.freeze.length) R.spawn(e, d.sim); d.t++; d.lamp = inp.on ? (function () { var p = R.toPx(inp.x, inp.y); return { px: p.x, py: p.y, on: true }; })() : null; if (d.sim.state !== 'play' || d.t > 30 * 9) { d.sim = new Sim(DEMO); d.t = 0; R.setLevel(d.sim); } }
+      R.frame(d.sim, { lamp: d.lamp, puck: null }, dt);
+    } else R.frame(null, {}, dt);
+    requestAnimationFrame(frame);
+  }
+  function resize() { R.resize(); if (S.demo && S.screen !== 'play') { R.top = 260; R.bottom = 40; R.layout(); R.top = 96; R.bottom = 74; } }
+  window.addEventListener('resize', resize);
+  resize(); show('title'); requestAnimationFrame(frame);
+
+  // test hooks (used by the headless screenshot suite)
+  window.MELT = { state: S, startLevel: startLevel, show: show, progress: prog, renderer: R };
+})();
+
+</script>
+</body>
+</html>

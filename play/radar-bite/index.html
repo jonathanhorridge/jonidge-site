@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+  <head>
+<!-- jonidge-play-gate -->
+<!-- jonidge-spa-restore -->
+<script>
+(function(){
+  try {
+    var k = "jonidge-radar-bite-path";
+    var r = sessionStorage.getItem(k);
+    if (!r) return;
+    sessionStorage.removeItem(k);
+    var project = location.hostname.endsWith("github.io");
+    var base = project ? "/jonidge-site/" : "/";
+    var prefix = base + "play/radar-bite/";
+    var bare = prefix.slice(0, -1);
+    if (r.indexOf(prefix) !== 0 && r.split("?")[0].split("#")[0] !== bare) return;
+    if (r !== location.pathname + location.search + location.hash) {
+      history.replaceState(null, "", r);
+    }
+  } catch (e) {}
+})();
+</script>
+
+<meta name="robots" content="noindex,nofollow">
+<style id="jonidge-gate-css">html{visibility:hidden!important}</style>
+<script>
+(function(){
+  try {
+    var t = localStorage.getItem("jonidge-play-v1") || "";
+    if (!/^v1\.[0-9a-f]{128}$/i.test(t)) {
+      location.replace("/play/");
+      return;
+    }
+    var s = document.getElementById("jonidge-gate-css");
+    if (s) s.remove();
+  } catch (e) {
+    location.replace("/play/");
+  }
+})();
+</script>
+
+    <meta charset="utf-8" />
+    <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
+    <title>Radar Bite</title>
+    <!-- The `react-native-web` recommended style reset: https://necolas.github.io/react-native-web/docs/setup/#root-element -->
+    <style id="expo-reset">
+      /* These styles make the body full-height */
+      html,
+      body {
+        height: 100%;
+      }
+      /* These styles disable body scrolling if you are using <ScrollView> */
+      body {
+        overflow: hidden;
+      }
+      /* These styles make the root element full-height */
+      #root {
+        display: flex;
+        height: 100%;
+        flex: 1;
+      }
+    </style>
+  <meta name="theme-color" content="#E5532D">
+<link rel="icon" href="/play/radar-bite/favicon.ico"/><link rel="preload" href="/play/radar-bite/_expo/static/css/maplibre-gl-dc3f9f1339c2c312db0e4c8f314a98f9.css" as="style">
+<link rel="stylesheet" href="/play/radar-bite/_expo/static/css/maplibre-gl-dc3f9f1339c2c312db0e4c8f314a98f9.css"></head>
+
+  <body>
+    <!-- Use static rendering with Expo Router to support running without JavaScript. -->
+    <noscript> You need to enable JavaScript to run this app. </noscript>
+    <!-- The root element for your Expo app. -->
+    <div id="root"></div>
+  <script src="/play/radar-bite/_expo/static/js/web/__expo-metro-runtime-ed4c1cfa6193d76fc294130e42bd1916.js" defer></script><script src="/play/radar-bite/_expo/static/js/web/__common-122a8c7d782ffe1f4f94ec901522269e.js" defer></script><script src="/play/radar-bite/_expo/static/js/web/entry-174f3287ad63fbd99f92dfd9161a42f6.js" defer></script>
+</body>
+</html>

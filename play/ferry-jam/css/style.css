@@ -315,3 +315,203 @@ button{font:inherit;color:inherit;border:0;background:none;cursor:pointer;touch-
   .wordmark{font-size:62px}
   .wordmark span{font-size:72px}
 }
+
+/* ===== v3 road, pier, berths, daily, tutorial ===== */
+.home-daily{display:flex;gap:8px}
+.home-daily .btn{flex:1}
+.streak-chip{background:linear-gradient(180deg,#FFF6C8,#FFE56A);color:#8A6400;box-shadow:0 3px 0 #C48A00}
+.quest-dot{width:8px;height:8px;border-radius:50%;background:#E23B3B;display:inline-block;margin-left:4px}
+
+.mute-row{display:flex;gap:6px}
+.mute-row .ico-btn{width:40px;height:40px}
+
+.level-grid.chapters{grid-template-columns:repeat(2,1fr)}
+.chapter-head{grid-column:1/-1;margin:8px 2px 0;color:#fff;text-shadow:0 2px 0 #0E6A8A;
+  font-family:"Lilita One",system-ui,sans-serif;font-size:16px;letter-spacing:.4px}
+
+/* yard + ring road */
+.yard{flex:1;display:flex;flex-direction:column;min-height:0;padding:8px 8px 0;position:relative;
+  background:
+    radial-gradient(circle at 8% 18%,#5FDC9444 0 18px,transparent 19px),
+    radial-gradient(circle at 94% 28%,#5FDC9444 0 14px,transparent 15px),
+    linear-gradient(#5AAB4E,#3E7D38)}
+.yard .deco{position:absolute;pointer-events:none;z-index:3}
+.yard .deco.tree-l{left:2px;top:4px;width:28px}
+.yard .deco.tree-r{right:2px;top:14px;width:26px}
+
+.road{position:relative;background:
+  repeating-linear-gradient(90deg,transparent 0 12px, #F5D76A 12px 20px, transparent 20px 32px),
+  linear-gradient(180deg,#5A6170,#3E4450);
+  box-shadow:inset 0 0 0 2px #2E3340; z-index:2}
+.road-n,.road-s{height:26px;flex:0 0 26px;border-radius:6px}
+.road-s{background:
+  repeating-linear-gradient(90deg,transparent 0 12px, #F5D76A 12px 20px, transparent 20px 32px),
+  linear-gradient(180deg,#5A6170,#3E4450)}
+.road-w,.road-e{width:26px;flex:0 0 26px;border-radius:6px;background:
+  repeating-linear-gradient(180deg,transparent 0 12px, #F5D76A 12px 20px, transparent 20px 32px),
+  linear-gradient(180deg,#5A6170,#3E4450)}
+.yard-mid{flex:1;display:flex;min-height:0;align-items:stretch}
+.yard-mid .lot{flex:1;height:auto;max-height:none;aspect-ratio:auto;margin:0 3px}
+.road .arrow{position:absolute;color:#F5D76A;font-size:14px;font-weight:700;opacity:.9;pointer-events:none;
+  text-shadow:0 1px 0 #1A2A33}
+.road-n .arrow{right:8px;top:2px}
+.road-e .arrow{bottom:8px;left:6px}
+.road-w .arrow{bottom:8px;left:6px}
+.road-s .arrow{right:28%;top:3px}
+.wp{position:absolute;width:8px;height:8px;left:50%;top:50%;margin:-4px 0 0 -4px;pointer-events:none;opacity:0}
+.wp.sw{left:18%}.wp.se{left:82%}
+.wp.pier{left:50%;top:8px}
+
+/* pier with waiting bays + ramps */
+.pier{display:flex;flex-direction:column;gap:4px;padding:8px 10px 0;position:relative;z-index:3;
+  background:repeating-linear-gradient(90deg,#D9A15A 0 14px,#C48A4A 14px 16px,#B87A3E 16px 30px);
+  box-shadow:inset 0 6px 0 #8B5A2B55}
+.pier-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.pier-label,.bay-label,.next-label{font-size:10px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;
+  color:#fff;background:#8B5A2B;border-radius:999px;padding:2px 8px}
+.waiting-bays{display:flex;gap:8px;justify-content:center;align-items:flex-end;padding:2px 0 4px;flex-wrap:wrap}
+.bay{width:58px;height:42px;border-radius:6px;background:#3A404C;position:relative;
+  box-shadow:inset 0 0 0 2px #F5D76A,0 2px 0 #6E4520;display:grid;place-items:center}
+.bay:after{content:"";position:absolute;inset:4px;border:1.5px dashed #F5D76A88;border-radius:3px;pointer-events:none}
+.bay .car-svg{width:86%;height:86%;position:relative;z-index:1}
+.bay .wp{inset:auto;left:50%;top:50%}
+.ramps{display:flex;justify-content:space-around;align-items:flex-end;min-height:28px;padding:0 6px}
+.ramp{width:78px;height:28px;position:relative;z-index:4;
+  background:linear-gradient(180deg,#E2B36A,#B87A3E);
+  clip-path:polygon(8% 0,92% 0,100% 100%,0 100%);
+  box-shadow:0 2px 0 #6E4520;border-radius:0 0 4px 4px}
+.ramp:before{content:"";position:absolute;inset:6px 16px 4px;background:repeating-linear-gradient(90deg,#0000 0 8px,#6E452044 8px 10px)}
+.ramp .wp{top:100%}
+.ramp-tag{position:absolute;left:50%;bottom:100%;transform:translate(-50%,2px);font-size:9px;font-weight:700;
+  color:#fff;background:#0E6A8A;border-radius:999px;padding:1px 6px;white-space:nowrap}
+
+/* berths on the water, clearly separate */
+.berths{display:flex;gap:12px;justify-content:center;align-items:flex-start;padding:6px 8px 0;
+  background:linear-gradient(#8B5A2B 0 6px,#1E8FB5 6px);position:relative;z-index:2}
+.berth{position:relative;flex:1 1 140px;max-width:200px;display:flex;flex-direction:column;align-items:center}
+.berth-sign{font-size:10px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;color:#fff;
+  border-radius:999px;padding:3px 8px;margin-bottom:2px;box-shadow:0 2px 0 #0003;text-align:center;max-width:100%;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.berth.boarding{z-index:3}
+.berth.boarding .ferry{filter:drop-shadow(0 0 8px #FFE56A)}
+.berth.boarding .berth-sign{animation:signpulse 1.2s ease-in-out infinite}
+@keyframes signpulse{50%{transform:scale(1.05)}}
+.berth .ferry{width:100%;min-width:0;max-width:none;aspect-ratio:320/150;flex:none}
+.berth .wp{top:55%}
+.cap-pips{display:inline-flex;gap:2px;margin-left:4px;vertical-align:middle}
+.pip{width:7px;height:7px;border-radius:2px;background:#fff6;box-shadow:inset 0 0 0 1px #0003}
+.pip.on{background:#fff}
+.ferry-badge{position:absolute;left:8px;top:8px;z-index:4;font-size:9px;font-weight:700;background:#1A2A33;color:#fff;
+  border-radius:999px;padding:2px 6px;letter-spacing:.3px}
+.timer{background:#E23B3B}
+.small-only{background:#0E6A8A}
+
+.water{background:repeating-linear-gradient(180deg,#1E8FB5 0 10px,#1A86AA 10px 20px);
+  padding:8px 10px 10px;position:relative;overflow:hidden;min-height:64px}
+.queue-row{display:flex;align-items:center;gap:8px;position:relative;z-index:1;min-height:52px}
+.qferry{width:78px;flex:0 0 78px;opacity:.92;position:relative;transition:transform .5s,opacity .5s}
+.qferry .ferry-svg{width:100%;height:auto;display:block}
+.qferry .qcap{position:absolute;left:50%;bottom:2px;transform:translateX(-50%);font-size:9px;font-weight:700;
+  color:#fff;background:#0E6A8A;border-radius:999px;padding:0 5px}
+
+.flyer{position:absolute;z-index:20;pointer-events:none;margin:0;padding:0;will-change:transform;left:0;top:0}
+.stage{position:relative}
+
+.car .badge{position:absolute;right:-2px;top:-2px;width:18px;height:18px;z-index:5}
+.car.locked{filter:saturate(.7)}
+.gate{display:grid;place-items:center;z-index:3;padding:4%}
+.gate .gate-svg{width:90%;height:90%;filter:drop-shadow(0 2px 0 #0004)}
+
+/* tutorial */
+.tutor{position:absolute;inset:0;z-index:15;pointer-events:none}
+.tutor .bubble{position:absolute;left:50%;bottom:12px;transform:translateX(-50%);width:min(280px,90%);
+  background:#fff;color:var(--ink);border-radius:16px;padding:10px 12px;font-weight:700;font-size:14px;text-align:center;
+  box-shadow:0 6px 0 #7AA8B8,0 10px 20px #0004;pointer-events:auto}
+.tutor .bubble button{margin-top:8px}
+.hand-wrap{position:absolute;width:56px;height:64px;pointer-events:none;animation:handtap 1s ease-in-out infinite;
+  filter:drop-shadow(0 3px 0 #0004);z-index:16}
+.hand-wrap .hand-svg{width:100%;height:100%}
+@keyframes handtap{50%{transform:translate(6px,8px) scale(.92)}}
+
+/* combo + ferry full + flying tickets */
+.fx-toast{position:absolute;left:50%;top:30%;transform:translate(-50%,-20px);z-index:22;
+  font-family:"Lilita One",system-ui,sans-serif;font-size:28px;color:#FFE56A;text-shadow:0 3px 0 #C48A00,0 6px 12px #0006;
+  pointer-events:none;animation:fxpop .9s ease-out forwards;letter-spacing:1px;white-space:nowrap}
+@keyframes fxpop{0%{opacity:0;transform:translate(-50%,10px) scale(.7)}25%{opacity:1;transform:translate(-50%,-10px) scale(1.1)}
+  100%{opacity:0;transform:translate(-50%,-40px) scale(1)}}
+.fly-ticket{position:fixed;z-index:60;width:28px;height:21px;pointer-events:none;transition:transform .7s ease-in,opacity .7s}
+
+/* daily / calendar / quests */
+.daily-hero{background:linear-gradient(180deg,#fff,#F3F7FA);border-radius:20px;padding:16px;text-align:center;
+  box-shadow:0 6px 0 #7AA8B8;margin:6px 0 12px;color:var(--ink)}
+.daily-hero h3{margin:0;font-family:"Lilita One",system-ui,sans-serif;font-size:26px;color:#C25100}
+.streak-big{font-family:"Lilita One",system-ui,sans-serif;font-size:42px;color:#C25100;margin:4px 0}
+.calendar{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin:10px 0}
+.cal-day{background:#F3F7FA;border-radius:12px;padding:8px 0;text-align:center;font-weight:700;box-shadow:0 3px 0 #7AA8B8}
+.cal-day .d{font-size:10px;color:var(--muted);text-transform:uppercase}
+.cal-day .n{font-family:"Lilita One",system-ui,sans-serif;font-size:16px;color:#C25100}
+.cal-day.claimed{background:#C6F6D5;box-shadow:0 3px 0 #0B7A3E}
+.cal-day.today{outline:2px solid #F07810}
+.cal-day.locked{opacity:.5}
+.quest{display:flex;align-items:center;gap:10px;background:#fff;border-radius:14px;padding:10px 12px;margin:0 0 8px;
+  box-shadow:0 3px 0 #7AA8B8;color:var(--ink)}
+.quest .bar{flex:1;height:8px;background:#E8F0F4;border-radius:999px;overflow:hidden}
+.quest .bar > i{display:block;height:100%;background:#17A85C;width:0}
+.quest.done{opacity:.7}
+
+.share-box{background:#0F172A;color:#E2E8F0;border-radius:12px;padding:12px;font-family:ui-monospace,monospace;
+  font-size:13px;white-space:pre-wrap;text-align:left;margin:0 0 12px}
+
+/* ads stub overlay from ads.js (body-level) */
+body > .ad-overlay{position:fixed;inset:0;background:#0A2A36cc;z-index:80;display:flex;align-items:center;justify-content:center;padding:20px}
+body > .ad-overlay .ad-card{background:linear-gradient(180deg,#fff,#F3F7FA);border-radius:24px;padding:22px 18px;
+  max-width:340px;width:100%;text-align:center;box-shadow:0 12px 40px #0006;color:var(--ink)}
+body > .ad-overlay .ad-card h3{margin:0 0 6px;font-family:"Lilita One",system-ui,sans-serif;font-size:26px;color:#C25100}
+body > .ad-overlay .ad-card p{margin:0 0 14px;color:var(--muted);font-weight:600}
+body > .ad-overlay .ad-kicker{font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:#5B6E75;margin-bottom:8px}
+body > .ad-overlay .btn{width:100%;margin-bottom:8px}
+
+.cosmetic-row{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}
+.skin-chip{padding:8px 10px;border-radius:12px;background:#fff;box-shadow:0 3px 0 #7AA8B8;font-weight:700;font-size:13px}
+.skin-chip.on{background:#FFE56A}
+
+@media (max-height:700px){
+  .road-n,.road-s{height:20px;flex-basis:20px}
+  .road-w,.road-e{width:20px;flex-basis:20px}
+  .water{min-height:52px;padding:6px 8px}
+  .wordmark{font-size:48px}
+}
+
+
+/* Keep pier, berths and the Next queue on screen — the lot shrinks to fit. */
+.play{min-height:0}
+.play .blurb{padding:4px 8px 0;min-height:0;font-size:12px}
+.stage{overflow:hidden;min-height:0}
+.yard{flex:1 1 0;min-height:0;padding:6px 6px 0}
+.pier,.berths,.water{flex:0 0 auto}
+.yard-mid{min-height:0}
+.yard{overflow:hidden}
+.yard-mid{overflow:hidden;min-height:0}
+.yard-mid .lot{
+  flex:1 1 auto;
+  min-width:0;
+  min-height:0;
+  width:auto;
+  height:auto;
+  max-width:none;
+  max-height:none;
+  aspect-ratio:auto;
+  margin:0 3px;
+  overflow:visible;
+}
+.berth .ferry,.ferry{max-height:86px;aspect-ratio:320/150}
+.water{min-height:58px;padding:6px 8px 8px}
+.qferry{width:70px;flex-basis:70px}
+.road-n,.road-s{height:22px;flex-basis:22px}
+.road-w,.road-e{width:22px;flex-basis:22px}
+@media (max-height:760px){
+  .tools{padding-bottom:4px}
+  .tool{height:46px;min-width:64px}
+  .berth .ferry,.ferry{max-height:78px}
+  .water{min-height:52px}
+}

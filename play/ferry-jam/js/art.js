@@ -380,6 +380,45 @@
     coneSVG: coneSVG,
     treeSVG: treeSVG,
     bollardSVG: bollardSVG,
-    logoSVG: logoSVG
+    logoSVG: logoSVG,
+    handSVG: handSVG,
+    lockBadge: lockBadge,
+    keyBadge: keyBadge,
+    gateSVG: gateSVG,
+    muteIcon: muteIcon
   };
+
+  function handSVG() {
+    return '<svg class="hand-svg" viewBox="0 0 80 90" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">' +
+      '<path d="M28 38 V16 a6 6 0 0 1 12 0 V38" fill="#FFE7C2" stroke="#C48A4A" stroke-width="2"/>' +
+      '<path d="M40 36 V12 a6 6 0 0 1 12 0 V36" fill="#FFE7C2" stroke="#C48A4A" stroke-width="2"/>' +
+      '<path d="M52 38 V18 a6 6 0 0 1 12 0 V42" fill="#FFE7C2" stroke="#C48A4A" stroke-width="2"/>' +
+      '<path d="M20 44 V32 a6 6 0 0 1 12 0 V46" fill="#FFE7C2" stroke="#C48A4A" stroke-width="2"/>' +
+      '<path d="M18 44 h46 c8 0 14 6 14 14 v8 c0 14-12 22-26 22 h-16 c-16 0-28-8-30-22 v-8 c0-8 6-14 12-14z" fill="#FFE7C2" stroke="#C48A4A" stroke-width="2"/>' +
+      '<circle cx="58" cy="58" r="3.2" fill="#E8B48A"/>' +
+      '</svg>';
+  }
+  function lockBadge() {
+    return '<svg class="badge-svg" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg"><rect x="6" y="14" width="20" height="14" rx="3" fill="#F5C400" stroke="#8A6400" stroke-width="1.5"/><path d="M10 14 V11 a6 6 0 0 1 12 0 v3" fill="none" stroke="#8A6400" stroke-width="2.4"/><circle cx="16" cy="21" r="2.2" fill="#8A6400"/></svg>';
+  }
+  function keyBadge() {
+    return '<svg class="badge-svg" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg"><circle cx="11" cy="16" r="6" fill="#F5C400" stroke="#8A6400" stroke-width="1.6"/><circle cx="11" cy="16" r="2.2" fill="#fff"/><rect x="16" y="14.2" width="12" height="3.6" rx="1" fill="#F5C400" stroke="#8A6400" stroke-width="1"/><rect x="23" y="17.6" width="2" height="4" fill="#F5C400"/><rect x="26.5" y="17.6" width="2" height="3" fill="#F5C400"/></svg>';
+  }
+  function gateSVG() {
+    return '<svg class="gate-svg" viewBox="0 0 80 80" xmlns="http://www.w3.org/2000/svg">' +
+      '<rect x="6" y="8" width="8" height="64" rx="2" fill="#C48A4A" stroke="#6E4520"/>' +
+      '<rect x="66" y="8" width="8" height="64" rx="2" fill="#C48A4A" stroke="#6E4520"/>' +
+      '<rect x="10" y="18" width="60" height="36" fill="#E23B3B"/>' +
+      '<rect x="10" y="26" width="60" height="8" fill="#fff"/>' +
+      '<rect x="10" y="42" width="60" height="8" fill="#fff"/>' +
+      '<rect x="10" y="18" width="60" height="36" fill="none" stroke="#8A1218" stroke-width="2"/>' +
+      '</svg>';
+  }
+  function muteIcon(kind, muted) {
+    var body = kind === 'bgm'
+      ? '<path d="M8 14h6l8-6v20l-8-6H8z" fill="currentColor"/>'
+      : '<path d="M8 13h5l7-6v18l-7-6H8z" fill="currentColor"/><path d="M22 12 c3 2 3 8 0 10" fill="none" stroke="currentColor" stroke-width="2"/>';
+    var slash = muted ? '<path d="M7 25 L25 7" stroke="#E23B3B" stroke-width="3" stroke-linecap="round"/>' : '';
+    return '<svg class="ico" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">' + body + slash + '</svg>';
+  }
 })(typeof self !== 'undefined' ? self : this);

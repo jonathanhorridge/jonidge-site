@@ -1,114 +1,88 @@
-/* Tickets, costs, products, regional prices. Numbers are documented in MONETIZATION.md. */
+/* Ferry Jam economy + IAP catalog. Placeholder prices only — no real charges. */
 (function (root) {
   'use strict';
-  var ECONOMY = {
-    currency: 'Tickets',
-    welcomeGift: 50,
-    perStar: 2,
-    firstClear: 5,
-    allClearBonus: 50,
-    adReward: 15,
-    adsPerDay: 3,
-    interstitial: { everyLevels: 3, fromLevel: 6 }, // count completions of level >= 6; show every 3rd
-    costs: { hint: 20, extraSlot: 25, skip: 50 },
-    stars: { twoStarMaxHints: 1, twoStarParFactor: 2 }
-  };
-
-  var PRODUCTS = [
-    { sku: 'tickets_200',  kind: 'pack',    name: 'Handful',  coins: 200,  bonus: 0 },
-    { sku: 'tickets_550',  kind: 'pack',    name: 'Pouch',    coins: 550,  bonus: 10, tag: 'popular' },
-    { sku: 'tickets_1200', kind: 'pack',    name: 'Chest',    coins: 1200, bonus: 20 },
-    { sku: 'tickets_2600', kind: 'pack',    name: 'Treasure', coins: 2600, bonus: 30, tag: 'best_value' },
-    { sku: 'starter',      kind: 'starter', name: 'Starter pack', coins: 500, dockTokens: 2, oneTime: true },
-    { sku: 'no_ads',       kind: 'noads',   name: 'Remove Ads', oneTime: true }
-  ];
-
-  var PRICE_TABLE = {
-    A: {
-      USD: [1.99, 4.99, 9.99, 19.99, 2.99, 3.99],
-      CHF: [2.00, 5.00, 10.00, 20.00, 3.00, 4.00],
-      EUR: [1.99, 4.99, 9.99, 19.99, 2.99, 3.99],
-      GBP: [1.99, 4.99, 9.99, 19.99, 2.99, 3.99],
-      CAD: [2.79, 6.99, 13.99, 27.99, 3.99, 5.49],
-      AUD: [2.99, 7.99, 15.99, 29.99, 4.49, 5.99],
-      NZD: [3.49, 8.99, 16.99, 34.99, 4.99, 6.99],
-      SEK: [25, 59, 119, 229, 35, 45],
-      NOK: [25, 59, 119, 229, 35, 45],
-      DKK: [15, 39, 75, 149, 22, 29],
-      JPY: [300, 800, 1500, 3000, 450, 600]
+  var E = {
+    currencyName: 'Tickets',
+    currencyCode: 'tickets',
+    welcomeGift: 40,
+    perStar: 5,
+    firstClearBonus: 15,
+    dailyPuzzleReward: 25,
+    dailyPuzzlePerfect: 15,
+    comboBonus: 2,
+    ferryFullBonus: 3,
+    questReward: 15,
+    skipCost: 40,
+    hintCost: 20,
+    extraBayCost: 25,
+    undoCost: 10,
+    freeUndosPerLevel: 3,
+    streakFreezeCost: 30,
+    adReward: {
+      tickets: 25,
+      hint: 1,
+      extraBay: 1,
+      undo: 3,
+      doubleCoins: true,
+      streakSave: true,
+      dailyDouble: true
     },
-    B: {
-      USD: [1.29, 2.99, 5.99, 12.99, 1.99, 2.49],
-      EUR: [1.49, 3.49, 6.99, 13.99, 1.99, 2.99],
-      PLN: [5.99, 13.99, 27.99, 54.99, 8.99, 10.99],
-      CZK: [35, 85, 169, 339, 49, 65],
-      KRW: [1900, 4400, 8800, 18000, 2900, 3900]
+    interstitial: {
+      afterLevel: 8,
+      every: 3,
+      neverInDaily: true,
+      neverAfterRewarded: true
     },
-    C: {
-      USD: [0.99, 1.99, 3.99, 7.99, 0.99, 1.49],
-      BRL: [4.90, 11.90, 22.90, 44.90, 6.90, 8.90],
-      MXN: [19, 45, 89, 179, 29, 35],
-      INR: [49, 119, 229, 449, 69, 89],
-      IDR: [9900, 24900, 49900, 99000, 15000, 19000],
-      TRY: [29.99, 69.99, 139.99, 279.99, 44.99, 54.99],
-      PHP: [49, 119, 249, 499, 75, 99],
-      ZAR: [17.99, 39.99, 79.99, 159.99, 24.99, 32.99],
-      COP: [3900, 8900, 17900, 34900, 4900, 6900],
-      ARS: [990, 2290, 4490, 8990, 1490, 1890]
-    }
+    loginCalendar: [10, 15, 20, 25, 30, 40, 80],
+    products: [
+      { id: 'tickets_100',  title: '100 Tickets',     tickets: 100,  priceUSD: 0.99, tag: null },
+      { id: 'tickets_550',  title: '550 Tickets',     tickets: 550,  priceUSD: 4.99, tag: 'Popular' },
+      { id: 'tickets_1200', title: '1,200 Tickets',   tickets: 1200, priceUSD: 9.99, tag: 'Best' },
+      { id: 'tickets_2500', title: '2,500 Tickets',   tickets: 2500, priceUSD: 19.99, tag: null },
+      { id: 'remove_ads',   title: 'Remove Ads',      tickets: 0,    priceUSD: 3.99, tag: 'No ads', type: 'ads' },
+      { id: 'starter_pack', title: 'Starter Pack',    tickets: 200,  priceUSD: 2.99, tag: 'Value', type: 'starter', extras: { removeAds7d: true, hint: 3 } },
+      { id: 'harbor_pass',  title: 'Harbor Pass',     tickets: 0,    priceUSD: 4.99, tag: 'Pass', type: 'pass', extras: { removeAds: true, dailyBonus: 20, days: 30 } },
+      { id: 'skin_car_taxi',   title: 'Taxi Skin',    tickets: 0,    priceUSD: 1.99, tag: 'Cosmetic', type: 'skin', skin: { kind: 'car', id: 'taxi' } },
+      { id: 'skin_ferry_stripe', title: 'Stripe Livery', tickets: 0, priceUSD: 1.99, tag: 'Cosmetic', type: 'skin', skin: { kind: 'ferry', id: 'stripe' } }
+    ],
+    fx: { USD: 1, EUR: 0.92, GBP: 0.79, JPY: 154, BRL: 5.15, INR: 83, AUD: 1.52, CAD: 1.36 },
+    symbols: { USD: '$', EUR: '€', GBP: '£', JPY: '¥', BRL: 'R$', INR: '₹', AUD: 'A$', CAD: 'C$' }
   };
 
-  var COUNTRY = {
-    US: ['A', 'USD'], CA: ['A', 'CAD'], GB: ['A', 'GBP'], AU: ['A', 'AUD'], NZ: ['A', 'NZD'], IE: ['A', 'EUR'],
-    CH: ['A', 'CHF'], LI: ['A', 'CHF'], DE: ['A', 'EUR'], AT: ['A', 'EUR'], NL: ['A', 'EUR'], BE: ['A', 'EUR'],
-    LU: ['A', 'EUR'], FR: ['A', 'EUR'], FI: ['A', 'EUR'], SE: ['A', 'SEK'], NO: ['A', 'NOK'], DK: ['A', 'DKK'],
-    IS: ['A', 'USD'], JP: ['A', 'JPY'], SG: ['A', 'USD'], AE: ['A', 'USD'], IL: ['A', 'USD'], HK: ['A', 'USD'],
-    ES: ['B', 'EUR'], IT: ['B', 'EUR'], PT: ['B', 'EUR'], GR: ['B', 'EUR'], SI: ['B', 'EUR'], SK: ['B', 'EUR'],
-    EE: ['B', 'EUR'], LT: ['B', 'EUR'], LV: ['B', 'EUR'], CY: ['B', 'EUR'], MT: ['B', 'EUR'], HR: ['B', 'EUR'],
-    PL: ['B', 'PLN'], CZ: ['B', 'CZK'], KR: ['B', 'KRW'], SA: ['B', 'USD'], TW: ['B', 'USD'], CL: ['B', 'USD'],
-    UY: ['B', 'USD'], HU: ['B', 'USD'], RO: ['B', 'USD'],
-    BR: ['C', 'BRL'], MX: ['C', 'MXN'], IN: ['C', 'INR'], ID: ['C', 'IDR'], TR: ['C', 'TRY'], PH: ['C', 'PHP'],
-    ZA: ['C', 'ZAR'], CO: ['C', 'COP'], AR: ['C', 'ARS'], EG: ['C', 'USD'], NG: ['C', 'USD'], PK: ['C', 'USD'],
-    VN: ['C', 'USD'], TH: ['C', 'USD'], MY: ['C', 'USD'], PE: ['C', 'USD'], KE: ['C', 'USD'], BD: ['C', 'USD'],
-    UA: ['C', 'USD'], MA: ['C', 'USD']
-  };
-  var TZ_COUNTRY = {
-    'Europe/Zurich': 'CH', 'Europe/Berlin': 'DE', 'Europe/Paris': 'FR', 'Europe/London': 'GB', 'Europe/Madrid': 'ES',
-    'Europe/Rome': 'IT', 'Europe/Lisbon': 'PT', 'America/Sao_Paulo': 'BR', 'America/Mexico_City': 'MX',
-    'Asia/Kolkata': 'IN', 'Asia/Calcutta': 'IN', 'Asia/Jakarta': 'ID', 'Europe/Istanbul': 'TR', 'Asia/Tokyo': 'JP',
-    'Australia/Sydney': 'AU', 'America/Toronto': 'CA', 'America/New_York': 'US', 'America/Chicago': 'US',
-    'America/Los_Angeles': 'US', 'America/Denver': 'US'
+  E.formatPrice = function (usd, currency) {
+    currency = currency || 'USD';
+    var fx = E.fx[currency] || 1;
+    var raw = usd * fx;
+    var n = (currency === 'JPY' || currency === 'INR') ? Math.round(raw) : Math.round(raw * 100) / 100;
+    var sym = E.symbols[currency] || (currency + ' ');
+    if (currency === 'JPY' || currency === 'INR') return sym + n.toLocaleString('en-US');
+    return sym + n.toFixed(2);
   };
 
-  function detectCountry() {
+  E.product = function (id) {
+    for (var i = 0; i < E.products.length; i++) if (E.products[i].id === id) return E.products[i];
+    return null;
+  };
+
+  E.ECONOMY = E;
+  E.PRODUCTS = E.products;
+  E.detectCountry = function () {
     try {
-      var q = (typeof location !== 'undefined') && new URLSearchParams(location.search).get('region');
-      if (q && COUNTRY[q.toUpperCase()]) return q.toUpperCase();
+      var loc = (Intl.DateTimeFormat().resolvedOptions().locale || '').toUpperCase();
+      if (loc.indexOf('GB') !== -1) return 'GB';
+      if (loc.indexOf('DE') !== -1 || loc.indexOf('FR') !== -1 || loc.indexOf('CH') !== -1 || loc.indexOf('IT') !== -1 || loc.indexOf('ES') !== -1 || loc.indexOf('NL') !== -1) return 'EU';
+      if (loc.indexOf('JP') !== -1) return 'JP';
+      if (loc.indexOf('BR') !== -1) return 'BR';
+      if (loc.indexOf('IN') !== -1) return 'IN';
+      if (loc.indexOf('AU') !== -1) return 'AU';
+      if (loc.indexOf('CA') !== -1) return 'CA';
     } catch (e) {}
-    var langs = [];
-    if (typeof navigator !== 'undefined') langs = (navigator.languages || []).concat(navigator.language || []);
-    try { langs.push(Intl.DateTimeFormat().resolvedOptions().locale); } catch (e) {}
-    for (var i = 0; i < langs.length; i++) {
-      var m = /[-_]([A-Za-z]{2})(?:$|[-_])/.exec(String(langs[i]));
-      if (m && COUNTRY[m[1].toUpperCase()]) return m[1].toUpperCase();
-    }
-    try { var tz = Intl.DateTimeFormat().resolvedOptions().timeZone; if (TZ_COUNTRY[tz]) return TZ_COUNTRY[tz]; } catch (e) {}
     return 'US';
-  }
+  };
+  E.currencyFor = function (country) {
+    return ({ US: 'USD', GB: 'GBP', EU: 'EUR', JP: 'JPY', BR: 'BRL', IN: 'INR', AU: 'AUD', CA: 'CAD' })[country] || 'USD';
+  };
 
-  function priceFor(sku, country) {
-    var idx = PRODUCTS.findIndex(function (p) { return p.sku === sku; });
-    var cfg = COUNTRY[country] || ['A', 'USD'];
-    var table = PRICE_TABLE[cfg[0]][cfg[1]] ? PRICE_TABLE[cfg[0]][cfg[1]] : PRICE_TABLE[cfg[0]].USD;
-    var cur = PRICE_TABLE[cfg[0]][cfg[1]] ? cfg[1] : 'USD';
-    var amount = table[idx], text;
-    try {
-      text = new Intl.NumberFormat(undefined, { style: 'currency', currency: cur,
-        minimumFractionDigits: (amount % 1 || cur === 'CHF') ? 2 : 0, maximumFractionDigits: 2 }).format(amount);
-    } catch (e) { text = cur + ' ' + amount; }
-    return { amount: amount, currency: cur, tier: cfg[0], text: text };
-  }
-
-  root.Economy = { ECONOMY: ECONOMY, PRODUCTS: PRODUCTS, PRICE_TABLE: PRICE_TABLE, COUNTRY: COUNTRY,
-    detectCountry: detectCountry, priceFor: priceFor };
+  root.Economy = E;
+  if (typeof module === 'object' && module.exports) module.exports = E;
 })(typeof self !== 'undefined' ? self : this);

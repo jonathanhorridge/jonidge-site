@@ -81,7 +81,8 @@ const sources = [
   { slug: "clawcastle", from: "/workspace/clawcastle/www" },
   { slug: "radar-bite", from: "/workspace/radarbite/dist-jonidge" },
   { slug: "gust-rally", from: "/workspace/kite-clash/www" },
-  { slug: "hexglen", from: "/workspace/hexhaven/web-drop/hexglen" }
+  { slug: "hexglen", from: "/workspace/hexhaven/web-drop/hexglen" },
+  { slug: "pocket-burrow", from: "/workspace/web-builds/pocket-burrow" }
 ];
 
 const SNIPPET = `<!-- jonidge-play-gate -->

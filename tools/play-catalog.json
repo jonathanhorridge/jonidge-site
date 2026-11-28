@@ -83,6 +83,14 @@
       "blurb": "A cozy daily hex puzzle that grows your village.",
       "icon": "/play/hexglen/assets/icon.svg",
       "notes": []
+    },
+    {
+      "name": "Pocket Burrow",
+      "slug": "pocket-burrow",
+      "kind": "game",
+      "blurb": "Dig a cozy burrow and welcome tiny critters every day.",
+      "icon": "/play/pocket-burrow/assets/icon-192.png",
+      "notes": []
     }
   ]
 }

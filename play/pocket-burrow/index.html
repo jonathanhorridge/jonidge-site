@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+<!-- jonidge-play-gate -->
+<meta name="robots" content="noindex,nofollow">
+<style id="jonidge-gate-css">html{visibility:hidden!important}</style>
+<script>
+(function(){
+  try {
+    var t = localStorage.getItem("jonidge-play-v1") || "";
+    if (!/^v1\.[0-9a-f]{128}$/i.test(t)) {
+      location.replace("/play/");
+      return;
+    }
+    var s = document.getElementById("jonidge-gate-css");
+    if (s) s.remove();
+  } catch (e) {
+    location.replace("/play/");
+  }
+})();
+</script>
+
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#7a5a43">
+<meta name="description" content="Pocket Burrow: dig a cosy burrow, furnish little rooms and welcome tiny critters. Short, calm visits.">
+<title>Pocket Burrow</title>
+<link rel="icon" href="assets/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="assets/apple-touch-icon-180.png">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div id="app">
+  <canvas id="scene" aria-label="Your burrow, side view"></canvas>
+  <header class="topbar">
+    <div class="chips">
+      <div class="chip" id="chip-acorn" title="Acorns"></div>
+      <div class="chip" id="chip-berry" title="Glowberries"></div>
+      <button class="chip chip-level" id="chip-level" aria-label="Burrow level"></button>
+    </div>
+  </header>
+  <div id="hint" class="hint hidden"></div>
+  <button id="btn-collect" class="fab hidden"></button>
+  <div id="toasts"></div>
+  <nav class="tabbar" id="tabbar"></nav>
+  <div id="sheet-root"></div>
+  <div id="intro" class="intro hidden">
+    <div class="intro-card">
+      <canvas id="intro-art" width="240" height="150"></canvas>
+      <h1>Pocket Burrow</h1>
+      <p>Dig a cosy burrow, furnish little rooms and welcome tiny friends. A few calm minutes a day is plenty.</p>
+      <button class="btn btn-big" id="intro-go">Start digging</button>
+      <p class="fine">A game by Jonidge · <span id="intro-test"></span></p>
+    </div>
+  </div>
+</div>
+<script src="js/config.js"></script>
+<script src="js/data.js"></script>
+<script src="js/sim.js"></script>
+<script src="js/reminders.js"></script>
+<script src="js/platform.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/ads.js"></script>
+<script src="js/art.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

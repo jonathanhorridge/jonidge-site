@@ -79,7 +79,8 @@ const sources = [
   { slug: "fin-to-feather", from: "/workspace/ftf-web/fin-to-feather" },
   { slug: "lilyward", from: "/workspace/tower-defense/www" },
   { slug: "clawcastle", from: "/workspace/clawcastle/www" },
-  { slug: "radar-bite", from: "/workspace/radarbite/dist-jonidge" }
+  { slug: "radar-bite", from: "/workspace/radarbite/dist-jonidge" },
+  { slug: "gust-rally", from: "/workspace/kite-clash/www" }
 ];
 
 const SNIPPET = `<!-- jonidge-play-gate -->

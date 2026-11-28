@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs><linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#6FC2FF"/><stop offset="1" stop-color="#FFF1D0"/></linearGradient></defs>
+  <rect width="512" height="512" rx="112" fill="url(#sky)"/>
+  <circle cx="390" cy="120" r="54" fill="#FFE58A"/>
+  <path d="M0 430 Q130 380 260 420 T512 400 V512 H0Z" fill="#7CD39A"/>
+  <g stroke="#FFFFFF" stroke-width="10" stroke-linecap="round" opacity=".85"><path d="M60 170h80M40 230h110M70 290h60"/></g>
+  <path d="M120 470 C180 420 210 380 250 330" fill="none" stroke="#FFFFFF" stroke-width="5" opacity=".7"/>
+  <g transform="translate(290 220) rotate(28)">
+    <path d="M0-120 L90-25 L0 0Z" fill="#FF5D73"/><path d="M0 120 L-90-25 L0 0Z" fill="#FF5D73"/>
+    <path d="M0-120 L-90-25 L0 0Z" fill="#FFD166"/><path d="M0 120 L90-25 L0 0Z" fill="#FFD166"/>
+    <path d="M0-120V120M-90-25H90" stroke="#7A4B3A" stroke-width="7" opacity=".6"/>
+    <path d="M0-120 L90-25 L0 120 L-90-25Z" fill="none" stroke="#fff" stroke-width="7"/>
+  </g>
+  <path d="M250 330 q-20 30 -10 60 q10 30 -15 60" fill="none" stroke="#FF8FA3" stroke-width="7" stroke-linecap="round"/>
+  <g fill="#FF5D73"><path d="M243 380l-18-10v20z M243 380l18-10v20z"/><path d="M233 430l-18-10v20z M233 430l18-10v20z" fill="#FFD166"/></g>
+</svg>

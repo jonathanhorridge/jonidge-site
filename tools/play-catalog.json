@@ -67,6 +67,14 @@
       "notes": [
         "Map needs WebGL2"
       ]
+    },
+    {
+      "name": "Gust Rally",
+      "slug": "gust-rally",
+      "kind": "game",
+      "blurb": "One-thumb kite racing: a new daily course every day.",
+      "icon": "/play/gust-rally/assets/icon-192.png",
+      "notes": []
     }
   ]
 }

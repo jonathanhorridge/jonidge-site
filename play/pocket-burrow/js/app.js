@@ -15,6 +15,7 @@
   var WW = 390, GROUND = 190, CW = A.CW, CH = A.CH, X0 = (WW - D.GRID.cols * CW) / 2, ROWS = D.GRID.rows, COLS = D.GRID.cols;
   var WORLD_H = GROUND + ROWS * CH + 70;
   var DOOR_X = X0 + D.GRID.entranceCol * CW + CW / 2;
+  function podSeed(x, y) { return x * 7 + y * 13 + 1; }
   function cellX(x) { return X0 + x * CW; } function cellY(y) { return GROUND + y * CH; }
 
   // ---------- state ----------
@@ -78,7 +79,7 @@
     view.w = w; view.h = h; view.scale = w / WW; canvas.width = Math.round(w * view.dpr); canvas.height = Math.round(h * view.dpr);
     var sh = Math.ceil((WORLD_H - GROUND) * view.scale * view.dpr), sw = Math.ceil(WW * view.scale * view.dpr);
     soil = doc.createElement('canvas'); soil.width = sw; soil.height = sh; var c = soil.getContext('2d'); c.scale(view.scale * view.dpr, view.scale * view.dpr); c.translate(0, -GROUND);
-    A.drawSoilTexture(c, WW, WORLD_H, GROUND);
+    A.drawSoilTexture(c, WW, WORLD_H, GROUND, D.GRID.strata.map(function (q) { return q.fromRow; }), CH);
     clampCam();
   }
   function maxCam() { return Math.max(0, WORLD_H - view.h / view.scale); }
@@ -110,7 +111,7 @@
 
   function drawScene() {
     var c = ctx, s = view.scale * view.dpr, t = clock;
-    c.setTransform(1, 0, 0, 1, 0, 0); c.fillStyle = '#3a2a20'; c.fillRect(0, 0, canvas.width, canvas.height);
+    c.setTransform(1, 0, 0, 1, 0, 0); c.fillStyle = A.PAPER.bg; c.fillRect(0, 0, canvas.width, canvas.height);
     var shx = 0, shy = 0; if (shake > 0 && !calm()) { shx = (Math.random() - .5) * shake * 6 * s; shy = (Math.random() - .5) * shake * 6 * s; shake = Math.max(0, shake - .04); }
     c.setTransform(s, 0, 0, s, shx, -view.cam * s + shy);
     hits = [];
@@ -118,42 +119,33 @@
     if (visTop < GROUND + 20) A.drawSurface(c, WW, GROUND, { t: t, hour: hourNow, season: seasonNow, doorX: DOOR_X, supporter: st.supporter, rareTease: rareTeaseOn });
     c.drawImage(soil, 0, 0, soil.width, soil.height, 0, GROUND, WW, WORLD_H - GROUND);
     for (var id in st.decor.placed) if (st.decor.placed[id]) A.drawDecor(c, id, t, GROUND, DOOR_X);
-    D.GRID.strata.forEach(function (sr, i) { if (i === 0) return; var y = cellY(sr.fromRow); c.fillStyle = 'rgba(255,240,210,.16)'; c.fillRect(0, y - 1, WW, 2); c.font = '600 9px Fredoka,sans-serif'; c.textAlign = 'right'; c.fillStyle = 'rgba(255,240,210,.5)'; c.fillText(sr.name.toUpperCase() + ' · Lv ' + sr.level, WW - 6, y + 10); });
+    D.GRID.strata.forEach(function (sr, i) { if (i === 0) return; var y = cellY(sr.fromRow); c.font = '600 8.5px Fredoka,sans-serif'; c.textAlign = 'right'; c.fillStyle = 'rgba(246,231,203,.45)'; c.fillText(sr.name.toUpperCase() + ' · Lv ' + sr.level, WW - 5, y + 2); });
     var dugMap = {}; for (var k in st.cells) if (st.cells[k].dug) dugMap[k] = true;
     function isDug(x, y) { return !!dugMap[x + ',' + y]; }
+    // paper-cut shell: every chamber pod and tunnel gets a cast shadow, then a cream paper rim, then the tunnel interiors
+    var pieces = [];
+    for (var py = 0; py < ROWS; py++) { var Y0 = cellY(py); if (Y0 > visBot + 20 || Y0 + CH < visTop - CH) continue; for (var px = 0; px < COLS; px++) { if (!isDug(px, py)) continue;
+      pieces.push({ pod: true, x: px, y: py, seed: podSeed(px, py) });
+      if (isDug(px + 1, py)) pieces.push({ kind: 'h', x: px, y: py });
+      if (isDug(px, py + 1)) pieces.push({ kind: 'v', x: px, y: py }); } }
+    ['shadow', 'rim', 'fill'].forEach(function (pass) { pieces.forEach(function (pc) { if (pass === 'fill' && pc.pod) return; c.save(); c.translate(cellX(pc.x), cellY(pc.y)); A.shellPiece(c, pass, pc, CW, CH); c.restore(); }); });
     for (var cy = 0; cy < ROWS; cy++) {
       var y0 = cellY(cy); if (y0 > visBot + 10 || y0 + CH < visTop - 10) continue;
       for (var cx = 0; cx < COLS; cx++) {
         var x0 = cellX(cx), cell = S.cellAt(st, cx, cy), dg = st.digs.filter(function (d) { return d.x === cx && d.y === cy; })[0];
         c.save(); c.translate(x0, y0);
         var bt = clock - (bounce[cx + ',' + cy] || -9); if (bt < .5 && !calm()) { var bk = Math.sin(bt / .5 * 3.14 * 2.2) * (1 - bt / .5) * .05; c.translate(CW / 2, CH); c.scale(1 + bk, 1 - bk); c.translate(-CW / 2, -CH); }
-        if (cell && cell.dug) { if (cell.foyer) A.drawFoyer(c, t, CW, CH); else if (cell.room) A.drawRoom(c, cell.room.id, t, CW, CH); else A.drawEmptyCell(c, t, CW, CH, true); }
+        if (cell && cell.dug) { c.save(); A.podPath(c, CW, CH, podSeed(cx, cy)); c.clip(); if (cell.foyer) A.drawFoyer(c, t, CW, CH); else if (cell.room) A.drawRoom(c, cell.room.id, t, CW, CH); else A.drawEmptyCell(c, t, CW, CH, true); A.podVignette(c, CW, CH); c.restore(); }
         else if (dg) drawDigging(c, dg, t);
         else if (S.canDigCell(st, cx, cy)) drawDiggable(c, cx, cy, t);
         c.restore();
-      }
-    }
-    for (var ry = 0; ry < ROWS; ry++) for (var rx = 0; rx < COLS; rx++) {
-      if (!isDug(rx, ry)) continue; var X = cellX(rx), Y = cellY(ry);
-      c.lineCap = 'round';
-      [[0, -1, X, Y, X + CW, Y], [0, 1, X, Y + CH, X + CW, Y + CH], [-1, 0, X, Y, X, Y + CH], [1, 0, X + CW, Y, X + CW, Y + CH]].forEach(function (e) {
-        var nx = rx + e[0], ny = ry + e[1], cell = S.cellAt(st, rx, ry);
-        if (cell.foyer && e[1] === -1) return;
-        if (isDug(nx, ny)) return;
-        c.strokeStyle = '#2f1c10'; c.lineWidth = 5; c.beginPath(); c.moveTo(e[2], e[3]); c.lineTo(e[4], e[5]); c.stroke();
-        c.strokeStyle = 'rgba(214,165,110,.5)'; c.lineWidth = 1.4; c.beginPath(); c.moveTo(e[2] + (e[0] ? -e[0] * 3 : 0), e[3] + (e[1] ? -e[1] * 3 : 0)); c.lineTo(e[4] + (e[0] ? -e[0] * 3 : 0), e[5] + (e[1] ? -e[1] * 3 : 0)); c.stroke();
-      });
-      if (isDug(rx + 1, ry)) { c.fillStyle = '#4a3228'; c.fillRect(X + CW - 2, Y, 4, CH - 42); c.beginPath(); c.moveTo(X + CW - 2, Y + CH - 42); c.quadraticCurveTo(X + CW, Y + CH - 50, X + CW + 2, Y + CH - 42); c.fill(); c.fillStyle = 'rgba(0,0,0,.25)'; c.fillRect(X + CW - 2, Y + CH - 42, 4, 30); c.fillStyle = 'rgba(255,230,180,.18)'; c.fillRect(X + CW - 2, Y, 1.4, CH - 42); }
-      if (isDug(rx, ry + 1)) {
-        var hx = X + CW * .5 - 11; c.fillStyle = '#3d2a1e'; c.fillRect(X, Y + CH - 4, hx - X, 7); c.fillRect(hx + 22, Y + CH - 4, X + CW - hx - 22, 7); c.fillStyle = 'rgba(255,230,180,.2)'; c.fillRect(X, Y + CH - 4, hx - X, 1.4); c.fillRect(hx + 22, Y + CH - 4, X + CW - hx - 22, 1.4);
-        c.strokeStyle = '#a9764a'; c.lineWidth = 2; c.beginPath(); c.moveTo(hx + 4, Y + CH - 14); c.lineTo(hx + 4, Y + CH + 14); c.moveTo(hx + 18, Y + CH - 14); c.lineTo(hx + 18, Y + CH + 14); c.stroke(); c.lineWidth = 1.6; for (var rg = -10; rg <= 10; rg += 6) { c.beginPath(); c.moveTo(hx + 4, Y + CH + rg); c.lineTo(hx + 18, Y + CH + rg); c.stroke(); }
       }
     }
     var tt = now();
     S.eachRoom(st, function (room, cx, cy) {
       var x0 = cellX(cx), y0 = cellY(cy); if (y0 > visBot + 10 || y0 + CH < visTop - 10) return;
       var def = D.ROOM_BY_ID[room.id];
-      drawLabel(c, def.name, x0 + CW / 2, y0 + CH - 3, 9);
+      A.roomTag(c, def.name, x0 + CW / 2, y0 + CH - 2, room.lvl, D.ROOM_LEVELS.max, podSeed(cx, cy));
       if (!calm() && particles.length < 160) {
         var rn = Math.random();
         if (room.id === 'music' && rn < .012) fx('float', x0 + 30 + Math.random() * 30, y0 + 50, { ch: Math.random() < .5 ? '♪' : '♫', col: ['#ffd9a0', '#ffb6c9', '#bfe3ff'][Math.floor(Math.random() * 3)], size: 13, vy: 14 });
@@ -165,7 +157,6 @@
         else if (room.id === 'tea' && rn < .008) fx('float', x0 + 40 + Math.random() * 14, y0 + CH - 36, { ch: '~', col: 'rgba(255,255,255,.7)', size: 12, vy: 10, life: 2 });
         else if (room.id === 'spring' && rn < .012) fx('float', x0 + 24 + Math.random() * 40, y0 + CH - 30, { ch: '○', col: 'rgba(255,255,255,.6)', size: 8, vy: 12, life: 2.2 });
       }
-      for (var p = 0; p < D.ROOM_LEVELS.max; p++) { c.fillStyle = p < room.lvl ? '#ffd462' : 'rgba(0,0,0,.35)'; c.beginPath(); c.arc(x0 + 8 + p * 6.5, y0 + 7, 2.2, 0, 6.28); c.fill(); }
       var list = room.critters.map(function (id) { return actors[id]; }).filter(Boolean).sort(function (a, b) { return a.slot - b.slot; });
       list.forEach(function (a) {
         var cr = D.CRITTER_BY_ID[a.id], pop = Math.min(1, (clock - a.born) / .5), sc = pop < 1 ? (.2 + pop * .9 + Math.sin(pop * 3.14) * .25) : 1;
@@ -191,8 +182,7 @@
 
   function drawDiggable(c, cx, cy, t) {
     var sr = D.stratumForRow(cy), locked = S.level(st) < sr.level, info = S.digInfo(st, cx, cy);
-    c.fillStyle = locked ? 'rgba(20,10,5,.28)' : 'rgba(255,240,200,' + (.12 + .06 * Math.sin(t * 3 + cx)) + ')'; A.rr(c, 4, 4, CW - 8, CH - 8, 10); c.fill();
-    c.setLineDash([5, 4]); c.lineDashOffset = -t * 6; c.lineWidth = 2; c.strokeStyle = locked ? 'rgba(255,235,200,.35)' : 'rgba(255,240,200,.85)'; A.rr(c, 4, 4, CW - 8, CH - 8, 10); c.stroke(); c.setLineDash([]);
+    A.podSketch(c, CW, CH, podSeed(cx, cy), t, locked);
     if (locked) { c.font = '15px sans-serif'; c.textAlign = 'center'; c.fillStyle = '#000'; c.fillText('🔒', CW / 2, CH / 2 - 2); drawLabel(c, 'Burrow Lv ' + sr.level, CW / 2, CH / 2 + 16, 10); }
     else {
       var bob = Math.sin(t * 3 + cx * 2) * 2; c.save(); c.translate(CW / 2, CH / 2 - 8 + bob); c.rotate(-.5); c.fillStyle = '#c9a05a'; c.fillRect(-1.6, -4, 3.2, 15); c.fillStyle = '#c3ccd4'; c.strokeStyle = '#6a747c'; c.lineWidth = 1; c.beginPath(); c.moveTo(-5.5, -4); c.lineTo(5.5, -4); c.lineTo(4, -12); c.quadraticCurveTo(0, -17, -4, -12); c.closePath(); c.fill(); c.stroke(); c.restore();
@@ -201,9 +191,8 @@
   }
   function drawDigging(c, d, t) {
     var prog = d.end == null ? d.taps / D.DIG.tapsPerFreeDig : Math.min(1, 1 - (d.end - now()) / d.total);
-    c.fillStyle = 'rgba(20,10,5,.2)'; A.rr(c, 4, 4, CW - 8, CH - 8, 10); c.fill();
-    c.save(); c.beginPath(); c.rect(0, CH * (1 - prog), CW, CH); c.clip(); A.drawEmptyCell(c, t, CW, CH, false); c.restore();
-    c.fillStyle = 'rgba(40,22,10,.35)'; c.fillRect(0, 0, CW, CH * (1 - prog));
+    var sd = podSeed(d.x, d.y); A.podSketch(c, CW, CH, sd, t, false);
+    c.save(); A.podPath(c, CW, CH, sd, 7); c.clip(); c.beginPath(); c.rect(0, CH * (1 - prog), CW, CH); c.clip(); A.drawEmptyCell(c, t, CW, CH, false); A.podVignette(c, CW, CH); c.restore();
     c.save(); c.translate(CW / 2 - 6, CH - 14); A.drawCritter(c, D.CRITTER_BY_ID.truffle.look, { t: t, x: 0, y: 0, dir: 1, walk: 1, seed: 3, scale: .95 }); c.restore();
     if (Math.random() < .12) fx('dirt', cellX(d.x) + CW / 2 + 8, cellY(d.y) + CH - 24);
     c.fillStyle = 'rgba(0,0,0,.4)'; A.rr(c, 10, 8, CW - 20, 16, 8); c.fill();
@@ -341,8 +330,9 @@
       var u = S.upgradeInfo(st, r), beds = S.roomBeds(r), html = '<p class="mut" style="margin:0 0 6px">' + esc(def.blurb) + '</p>';
       html += '<div class="card col"><div class="row sp"><b>' + g.icon + ' ' + g.name + ' basket</b><span class="mut">' + n + ' / ' + Math.floor(cap) + '</span></div><div class="bar"><i style="width:' + Math.min(100, rd / cap * 100) + '%"></i></div><div class="row sp mut"><span>' + fmtN(rate) + ' per hour · holds ' + D.ROOM_LEVELS.capHours[r.lvl - 1] + 'h</span><span>' + (rd >= cap - .01 ? 'Full' : 'Full in ' + fmtDur(S.timeToFull(r, t))) + '</span></div>';
       html += '<div class="row"><button class="btn ' + (n < 1 ? 'off' : '') + '" data-act="collect" data-x="' + cx + '" data-y="' + cy + '">' + ic('basket') + ' Collect ' + (n ? '+' + fmtN(n * g.value) + ' 🌰' : '') + '</button>';
-      html += '<button class="btn sky small ' + (n < 5 || S.adsLeft(st) < 1 || st.ads.doubles >= D.ADS.doubleHarvest ? 'off' : '') + '" data-act="ad-double" data-x="' + cx + '" data-y="' + cy + '">▶ Double it</button></div>';
-      html += '<div class="mut" style="font-size:12px">Optional: a short sunny break doubles one basket (' + (D.ADS.doubleHarvest - st.ads.doubles) + ' left today).</div></div>';
+      if (ADS.available()) html += '<button class="btn sky small ' + (n < 5 || S.adsLeft(st) < 1 || st.ads.doubles >= D.ADS.doubleHarvest ? 'off' : '') + '" data-act="ad-double" data-x="' + cx + '" data-y="' + cy + '">▶ Double it</button>';
+      html += '</div>';
+      if (ADS.available()) html += '<div class="mut" style="font-size:12px">Optional: a short sunny break doubles one basket (' + (D.ADS.doubleHarvest - st.ads.doubles) + ' left today).</div></div>';
       if (r.giftReady) html += '<div class="card"><div class="grow"><h3>🎁 A gift is waiting</h3><p>Your residents left something for you.</p></div><button class="btn gold small" data-act="gift" data-x="' + cx + '" data-y="' + cy + '">Open</button></div>';
       else if (r.critters.length) html += '<p class="mut">Next gift in ' + fmtDur(r.giftAt - t) + '</p>';
       html += '<div class="sec">Residents · ' + r.critters.length + ' / ' + beds + ' beds</div>';
@@ -371,7 +361,7 @@
       var pend = st.digs.filter(function (d) { return d.x === cx && d.y === cy; })[0], t = now();
       if (pend) {
         var left = pend.end - t, bc = S.digBerryCost(pend, t), html = '<div class="card col"><div class="row sp"><b>⛏ Digging…</b><span>' + fmtDur(left) + '</span></div><div class="bar green"><i style="width:' + Math.min(100, (1 - left / pend.total) * 100) + '%"></i></div><p class="mut" style="margin:0">Your moles are on it. You can close this and come back, it finishes by itself.</p></div>';
-        html += '<div class="row"><button class="btn sky ' + (S.adsLeft(st) < 1 ? 'off' : '') + '" data-act="ad-dig">▶ Half the time</button><button class="btn gold ' + (st.berries >= bc ? '' : 'off') + '" data-act="skip-dig" data-x="' + cx + '" data-y="' + cy + '">' + ic('berry') + ' Finish now · ' + bc + '</button></div><div class="mut" style="font-size:12px;margin-top:6px">Both are optional. Waiting is free.</div>';
+        html += '<div class="row">' + (ADS.available() ? '<button class="btn sky ' + (S.adsLeft(st) < 1 ? 'off' : '') + '" data-act="ad-dig">▶ Half the time</button>' : '') + '<button class="btn gold ' + (st.berries >= bc ? '' : 'off') + '" data-act="skip-dig" data-x="' + cx + '" data-y="' + cy + '">' + ic('berry') + ' Finish now · ' + bc + '</button></div><div class="mut" style="font-size:12px;margin-top:6px">Both are optional. Waiting is free.</div>';
         return html;
       }
       var info = S.digInfo(st, cx, cy), sr = info.stratum, lock = S.level(st) < sr.level, busy = st.digs.length >= S.maxDigs(st);
@@ -400,7 +390,7 @@
       if (rh.unlocked && st.tut >= 5) html += '<div class="card col"><div class="row sp"><b>✨ Late-night guest</b><span class="mut">21:00</span></div><p style="margin:0">' + (rh.guaranteed ? 'A rare guest is due tonight. Leave the lantern on!' : 'Each evening there is a ' + Math.round(rh.chance * 100) + '% chance that someone rare drops by. Quiet nights make it likelier.') + '</p><div class="bar"><i style="width:' + Math.min(100, rh.quietDays / rh.pityDays * 100) + '%;background:linear-gradient(#e0c5ff,#b48be0)"></i></div><div class="mut" style="font-size:12px">' + (rh.guaranteed ? 'Guaranteed tonight' : rh.quietDays + ' / ' + rh.pityDays + ' quiet days until a guaranteed visit') + '</div></div>';
       html += '<div class="sec">Season</div>'; var sd = st.season.days, seasonName = seasonNow[0].toUpperCase() + seasonNow.slice(1);
       html += '<div class="card col"><div class="row sp"><b>' + seasonName + ' visit gift</b><span class="mut">' + Math.min(5, sd) + ' / 5 days</span></div><div class="bar green"><i style="width:' + Math.min(100, sd / 5 * 100) + '%"></i></div>' + (sd >= 5 && !st.season.claimed ? '<button class="btn gold" data-act="season-gift">Claim a free ' + seasonName.toLowerCase() + ' decoration</button>' : '<p class="mut" style="margin:0">Visit on 5 different days this season for a free decoration. No streak needed.</p>') + '</div>';
-      html += '<div class="card"><div class="grow"><h3>🔔 Wanderer\'s bell</h3><p>Ring it to invite one extra guest today (optional, once a day).</p></div><button class="btn sky small ' + (S.adsLeft(st) < 1 || st.ads.bell >= 1 || st.visitors.length >= D.VISITORS.maxWaiting ? 'off' : '') + '" data-act="ad-bell">▶ Ring</button></div>';
+      if (ADS.available()) html += '<div class="card"><div class="grow"><h3>🔔 Wanderer\'s bell</h3><p>Ring it to invite one extra guest today (optional, once a day).</p></div><button class="btn sky small ' + (S.adsLeft(st) < 1 || st.ads.bell >= 1 || st.visitors.length >= D.VISITORS.maxWaiting ? 'off' : '') + '" data-act="ad-bell">▶ Ring</button></div>';
       return html;
     } };
   }
@@ -433,13 +423,14 @@
   function nookSheet() {
     return { title: 'The Nook', kind: 'nook', live: true, render: function () {
       var html = '<div class="row sp"><span class="mut">' + ic('berry') + ' Glowberries are for cosy extras. Nothing here is needed to progress.</span></div>';
-      html += '<div class="sec">Sunny breaks (optional)</div>';
-      html += '<div class="card"><div class="grow"><h3>' + ic('berry') + ' A free Glowberry</h3><p>Watch a short break · ' + (D.ADS.berryPerDay - st.ads.berry) + ' left today</p></div><button class="btn sky small ' + (st.ads.berry >= D.ADS.berryPerDay || S.adsLeft(st) < 1 ? 'off' : '') + '" data-act="ad-berry">▶ Watch</button></div>';
+      if (ADS.available()) html += '<div class="sec">Sunny breaks (optional)</div>' + '<div class="card"><div class="grow"><h3>' + ic('berry') + ' A free Glowberry</h3><p>Watch a short break · ' + (D.ADS.berryPerDay - st.ads.berry) + ' left today</p></div><button class="btn sky small ' + (st.ads.berry >= D.ADS.berryPerDay || S.adsLeft(st) < 1 ? 'off' : '') + '" data-act="ad-berry">▶ Watch</button></div>';
       html += '<div class="sec">Decorations</div><p class="mut" style="margin:0 0 4px">Purely cosmetic. They show up above ground and add a little cosiness.</p>';
       D.DECOR.forEach(function (d) { var own = st.decor.owned[d.id], placed = st.decor.placed[d.id], cur = d.season === seasonNow; html += '<div class="card"><div class="cv sm" style="display:flex;align-items:center;justify-content:center;font-size:26px">' + d.icon + '</div><div class="grow"><h3>' + esc(d.name) + (cur ? ' <span class="pill" style="background:#e08a3a">in season</span>' : '') + '</h3><p>' + (d.season === 'any' ? 'Any time' : d.season[0].toUpperCase() + d.season.slice(1)) + (d.supporter ? ' · Supporter gift' : '') + '</p></div>' + (own ? '<button class="btn plain small" data-act="decor-toggle" data-id="' + d.id + '">' + (placed ? 'Hide' : 'Show') + '</button>' : d.supporter ? '<span class="mut">🔒</span>' : '<button class="btn gold small ' + (st.berries >= d.price ? '' : 'off') + '" data-act="decor-buy" data-id="' + d.id + '">' + ic('berry') + ' ' + d.price + '</button>') + '</div>'; });
-      html += '<div class="sec">Glowberry baskets <span class="test-badge">' + (IAP.simulated ? 'Test mode: no real payment' : 'Store') + '</span></div>';
-      D.PRODUCTS.forEach(function (p) { var owned = p.oneTime && st.supporter; html += '<div class="card"><div class="cv sm" style="display:flex;align-items:center;justify-content:center">' + ic(p.kind === 'supporter' ? 'heart' : 'berry') + '</div><div class="grow"><h3>' + esc(p.name) + '</h3><p>' + (p.desc || p.berries + ' Glowberries') + '</p></div><button class="btn gold small ' + (owned ? 'off' : '') + '" data-act="buy" data-sku="' + p.sku + '">' + (owned ? 'Owned' : '$' + p.usd.toFixed(2)) + '</button></div>'; });
-      html += '<p class="mut" style="font-size:12px">Prices shown in USD; stores localise them. Purchases never speed up your burrow beyond what waiting does, and there are no loot boxes or timers designed to pressure you.</p>';
+      if (!IAP.shopVisible()) return html;
+      html += '<div class="sec">Glowberry baskets' + (IAP.simulated ? ' <span class="test-badge">Test mode: no real payment</span>' : '') + '</div>';
+      if (IAP.mode === 'unavailable' || (IAP.mode === 'store' && !IAP.ready)) return html + '<p class="mut">The shop isn\'t available right now. Your burrow works the same without it.</p>';
+      D.PRODUCTS.forEach(function (p) { var owned = p.oneTime && st.supporter, price = IAP.price(p); if (!price && !owned) return; html += '<div class="card"><div class="cv sm" style="display:flex;align-items:center;justify-content:center">' + ic(p.kind === 'supporter' ? 'heart' : 'berry') + '</div><div class="grow"><h3>' + esc(p.name) + '</h3><p>' + (p.desc || p.berries + ' Glowberries') + '</p></div><button class="btn gold small ' + (owned ? 'off' : '') + '" data-act="buy" data-sku="' + p.sku + '">' + (owned ? 'Owned' : esc(price)) + '</button></div>'; });
+      html += '<p class="mut" style="font-size:12px">' + (IAP.mode === 'store' ? 'Prices include tax and are set by your app store.' : 'Test prices in USD; the stores show local prices.') + ' Purchases never speed up your burrow beyond what waiting does, and there are no loot boxes or timers designed to pressure you.</p>';
       return html;
     } };
   }
@@ -449,14 +440,18 @@
       function sw(label, key, act) { return '<div class="switch"><span>' + label + '</span><button class="tog ' + (s[key] ? 'on' : '') + '" data-act="' + act + '" aria-label="' + label + '"></button></div>'; }
       var html = sw('Sound effects', 'sound', 'set-sound') + sw('Music', 'music', 'set-music') + sw('Southern hemisphere seasons', 'southern', 'set-south') + sw('Gentle reminders' + (P.Notify.supported ? '' : ' (in the app)'), 'notifications', 'set-notif') + sw('Reduce motion', 'reduceMotion', 'set-motion');
       html += '<div class="sec">Your burrow</div><div class="row"><button class="btn plain small" data-act="export">Back-up code</button><button class="btn plain small" data-act="import">Restore</button><button class="btn plain small" data-act="reset">Start over</button></div><div id="codebox"></div>';
+      html += '<div class="sec">Privacy and help</div><div class="row wrap">' + (ADS.privacyRequired ? '<button class="btn plain small" data-act="privacy-choices">Privacy choices</button>' : '') + (IAP.mode === 'store' ? '<button class="btn plain small" data-act="restore">Restore purchases</button>' : '') + '<button class="btn plain small" data-act="legal" data-page="privacy">Privacy</button><button class="btn plain small" data-act="legal" data-page="terms">Terms</button><button class="btn plain small" data-act="legal" data-page="support">Support</button><button class="btn plain small" data-act="legal" data-page="data-deletion">Delete my data</button></div>';
       html += '<div class="sec">About</div><p class="mut" style="margin:0">Pocket Burrow ' + CFG.version + ' · a Jonidge game<br>Contact: <b>' + CFG.supportEmail + '</b><br>Art and music made for this game. Fonts: Fredoka and Lilita One (SIL OFL).<br>Your game is saved on this device only.</p>';
-      html += '<p class="mut" style="font-size:12px">' + (ADS.simulated ? 'Web test build: ads and purchases are simulated.' : '') + '</p>';
+      html += '<p class="mut" style="font-size:12px">' + (ADS.simulated ? 'Web test build: ads and purchases are simulated.' : ADS.mode === 'live' && ADS.testing() ? 'Test ads (Google test units).' : '') + '</p>';
       return html;
     } };
   }
 
   // ---------- actions ----------
   var actions = {
+    'privacy-choices': function () { snd('tap'); ADS.showPrivacyOptions().then(function () { if (sheet) renderSheet(); }); },
+    'restore': function () { snd('tap'); IAP.restore().then(function (info) { if (IAP.ownsSupporter(info) && !st.supporter) grantPurchase(D.PRODUCTS.filter(function (q) { return q.kind === 'supporter'; })[0], 'restore-supporter'); else toast(info ? 'Everything is restored.' : 'Nothing to restore.'); }); },
+    'legal': function (el) { snd('tap'); openSheet(legalSheet(el.dataset.page)); },
     'open-door': function () { snd('tap'); setTab('door'); openSheet(doorSheet()); },
     close: function () { snd('tap'); closeSheet(); },
     collect: function (el) { doCollect(+el.dataset.x, +el.dataset.y); },
@@ -557,13 +552,43 @@
       var o = doc.createElement('div'); o.className = 'adscreen'; o.innerHTML = '<div style="font-size:48px">☀️</div><h2 style="margin:0">Sunny break</h2><div style="color:#d9c7a8">Test ad (simulated in the web build)</div><div class="bar"><i id="adbar" style="width:0%"></i></div><button class="btn plain small" id="adx">Skip (no reward)</button>';
       $('app').appendChild(o); var t0 = Date.now(), fin = false, iv = setInterval(function () { var p = Math.min(1, (Date.now() - t0) / (params.get('fastad') ? 100 : 2500)); $('adbar').style.width = p * 100 + '%'; if (p >= 1 && !fin) { fin = true; clearInterval(iv); o.remove(); resolve(true); } }, 50);
       $('adx').onclick = function () { if (fin) return; fin = true; clearInterval(iv); o.remove(); resolve(false); };
-    }).then(function (ok) { if (ok) done(); else toast('No reward this time. That is fine!'); });
+    }, function (why) {
+      if (why === 'att') return attExplainer(function () { watchAd(kind, done); });
+      toast(why === 'consent' ? 'Sunny breaks need your privacy choice first (More > Privacy choices).' : 'No sunny break is ready right now. Try again in a moment.');
+    }).then(function (ok) { if (ok) done(); else if (ok === false && ADS.simulated) toast('No reward this time. That is fine!'); });
+  }
+  /** iOS only: a short, honest explainer before Apple's tracking question (App Tracking Transparency). */
+  function attExplainer(then) {
+    var o = doc.createElement('div'); o.className = 'adscreen'; o.innerHTML = '<div style="font-size:44px">🌻</div><h2 style="margin:0">One quick question</h2><p style="max-width:290px">Sunny breaks are short ads that keep Pocket Burrow free. Next, your iPhone asks whether ads may use your activity from other apps. Either answer is fine: you get the same rewards.</p><button class="btn gold" id="attok">Continue</button>';
+    $('app').appendChild(o); $('attok').onclick = function () { o.remove(); ADS.requestTracking().then(function () { then(); }); };
   }
   function buy(sku) {
     var p = D.PRODUCTS.filter(function (q) { return q.sku === sku; })[0]; if (!p) return;
-    IAP.buy(sku, function (resolve) { var o = doc.createElement('div'); o.className = 'adscreen'; o.innerHTML = '<h2 style="margin:0">Test purchase</h2><p style="max-width:280px">No real payment is made. Simulate buying <b>' + esc(p.name) + '</b>?</p><div class="row"><button class="btn gold" id="pok">Simulate</button><button class="btn plain" id="pno">Cancel</button></div>'; $('app').appendChild(o); $('pok').onclick = function () { o.remove(); resolve(true); }; $('pno').onclick = function () { o.remove(); resolve(false); }; }).then(function (ok) {
-      if (!ok) return; if (p.kind === 'supporter') { if (S.grantSupporter(st).ok) toast('💛 Thank you! Golden Acorn Sign and 60 Glowberries.'); } else { st.berries += p.berries; toast('+' + p.berries + ' ' + ic('berry')); } snd('gift'); dirtyUp(); save(); if (sheet) renderSheet();
-    });
+    if (p.oneTime && st.supporter) return;
+    function go() {
+      IAP.purchase(p, function (resolve) { var o = doc.createElement('div'); o.className = 'adscreen'; o.innerHTML = '<h2 style="margin:0">Test purchase</h2><p style="max-width:280px">No real payment is made. Simulate buying <b>' + esc(p.name) + '</b>?</p><div class="row"><button class="btn gold" id="pok">Simulate</button><button class="btn plain" id="pno">Cancel</button></div>'; $('app').appendChild(o); $('pok').onclick = function () { o.remove(); resolve(true); }; $('pno').onclick = function () { o.remove(); resolve(false); }; }).then(function (r) {
+        if (r.ok) return grantPurchase(p, r.transactionId);
+        if (r.alreadyOwned && p.oneTime) return grantPurchase(p, 'owned-' + p.sku);
+        if (r.pending) toast('Your purchase is waiting for approval. It arrives as soon as the store confirms it.');
+        else if (!r.cancelled && !r.mock) toast('The purchase did not go through. Nothing was charged.');
+      });
+    }
+    if (IAP.mode === 'store' && IAP.needsWaiver()) {
+      var o = doc.createElement('div'); o.className = 'adscreen'; o.innerHTML = '<h2 style="margin:0">Before you buy</h2><p style="max-width:290px"><b>' + esc(p.name) + '</b> arrives in your burrow straight away. By continuing you agree to immediate delivery and understand that your 14-day right of withdrawal ends once it has been delivered.</p><div class="row"><button class="btn gold" id="wok">Continue</button><button class="btn plain" id="wno">Cancel</button></div>';
+      $('app').appendChild(o); $('wok').onclick = function () { o.remove(); go(); }; $('wno').onclick = function () { o.remove(); };
+    } else go();
+  }
+  /** Grant a purchase exactly once per store transaction. */
+  function grantPurchase(p, tx) {
+    if (tx && st.iap.tx.indexOf(tx) >= 0) return;
+    if (tx) { st.iap.tx.push(tx); if (st.iap.tx.length > 200) st.iap.tx = st.iap.tx.slice(-200); }
+    if (p.kind === 'supporter') { if (S.grantSupporter(st).ok) toast('💛 Thank you! Golden Acorn Sign and 60 Glowberries.'); }
+    else { st.berries += p.berries; toast('+' + p.berries + ' ' + ic('berry')); }
+    snd('gift'); dirtyUp(); save(); if (sheet) renderSheet();
+  }
+  function legalSheet(page) {
+    var titles = { privacy: 'Privacy', terms: 'Terms', support: 'Support', 'data-deletion': 'Delete my data' };
+    return { title: titles[page] || 'Legal', kind: 'legal', live: false, render: function () { return '<iframe class="legal" src="' + (CFG.legalBase || 'legal/') + page + '.html" title="' + esc(titles[page] || page) + '"></iframe>'; } };
   }
 
   // ---------- input ----------
@@ -642,6 +667,9 @@
       handleEvents(ev.filter(function (e) { return e.t !== 'visitor' && e.t !== 'digDone'; }));
       var d = new Date(now()); hourNow = forceHour != null ? forceHour : d.getHours() + d.getMinutes() / 60; seasonNow = forceSeason || D.seasonOf(d, st.settings.southern);
       view.cam = 0; refreshHud();
+      ADS.start();
+      IAP.onChange = function (info) { if (IAP.ownsSupporter(info) && !st.supporter) grantPurchase(D.PRODUCTS.filter(function (q) { return q.kind === 'supporter'; })[0], 'entitlement-supporter'); };
+      IAP.init(D.PRODUCTS).then(function () { if (sheet && sheet.kind === 'nook') renderSheet(); });
       $('intro-test').innerHTML = ADS.simulated ? '<span class="test-badge">web test build</span>' : '';
       var needIntro = (fresh || (!st.settings.introSeen && st.tut === 0)) && !params.get('skipintro');
       if (needIntro) { $('intro').classList.remove('hidden'); introArt(); } else st.settings.introSeen = true;
@@ -650,7 +678,7 @@
       if (!fresh) setTimeout(function () { greetAll(); if (!sheet && !introOpen()) { maybeWelcome(before); if (!sheet && st.tut >= 5 && S.dailyAvailable(st, now())) { setTab('door'); openSheet(doorSheet()); } } }, 500);
       (doc.fonts && doc.fonts.load ? Promise.all([doc.fonts.load('600 12px Fredoka'), doc.fonts.load('400 20px "Lilita One"')]) : Promise.resolve()).catch(function () {}).then(function () { root.requestAnimationFrame(frame); });
       setInterval(function () { if (dirty) save(); }, 10000);
-      root.PB = { state: function () { return st; }, S: S, D: D, now: now, advance: function (ms) { timeOffset += ms; var e2 = S.tick(st, now()); handleEvents(e2); refreshHud(); return e2; }, save: save, tap: tap, hits: function () { return hits; }, cellTap: cellTap, openSheet: openSheet, actions: actions, sheet: function () { return sheet; }, collectAll: collectAllNow, view: view, cellCenter: function (x, y) { return { x: cellX(x) + CW / 2, y: cellY(y) + CH / 2 }; }, friendCard: friendCard, meetCard: meetCard, greetAll: greetAll, whenLabel: whenLabel, doorSheet: doorSheet, albumSheet: albumSheet, nookSheet: nookSheet, settingsSheet: settingsSheet, roomSheet: roomSheet, buildSheet: buildSheet, scrollTo: scrollTo, ready: true };
+      root.PB = { state: function () { return st; }, S: S, D: D, now: now, advance: function (ms) { timeOffset += ms; var e2 = S.tick(st, now()); handleEvents(e2); refreshHud(); return e2; }, save: save, tap: tap, hits: function () { return hits; }, cellTap: cellTap, openSheet: openSheet, actions: actions, sheet: function () { return sheet; }, collectAll: collectAllNow, view: view, cellCenter: function (x, y) { return { x: cellX(x) + CW / 2, y: cellY(y) + CH / 2 }; }, friendCard: friendCard, meetCard: meetCard, greetAll: greetAll, whenLabel: whenLabel, doorSheet: doorSheet, albumSheet: albumSheet, nookSheet: nookSheet, settingsSheet: settingsSheet, legalSheet: legalSheet, ads: ADS, iap: IAP, roomSheet: roomSheet, buildSheet: buildSheet, scrollTo: scrollTo, ready: true };
     });
   }
   function introArt() {

@@ -36,6 +36,7 @@
       season: { key: null, days: 0, claimed: false },
       decor: { owned: {}, placed: {} },
       ads: { day: dayKey(now), watched: 0, doubles: 0, berry: 0, bell: 0 },
+      iap: { tx: [] },                 // store transaction ids already granted (a purchase is never granted twice)
       supporter: false, albumClaimed: {},
       settings: { sound: true, music: true, notifications: false, southern: false, reduceMotion: false },
       stats: { collects: 0, acornsEarned: 0, requestsDone: 0 }
@@ -488,7 +489,7 @@
     o = migrate(o); if (!o || !o.cells || o.v > SAVE_VERSION) return null;
     var base = newState(now, o.rng); // fill any field missing from older saves
     for (var k in base) if (o[k] === undefined) o[k] = base[k];
-    ['ads', 'settings', 'stats', 'vis', 'daily', 'season', 'decor', 'albumClaimed'].forEach(function (g) { o[g] = Object.assign({}, base[g], o[g]); });
+    ['ads', 'iap', 'settings', 'stats', 'vis', 'daily', 'season', 'decor', 'albumClaimed'].forEach(function (g) { o[g] = Object.assign({}, base[g], o[g]); });
     if (!isFinite(o.lastSeen)) o.lastSeen = now;
     return o;
   }

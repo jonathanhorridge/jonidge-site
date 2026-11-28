@@ -28,7 +28,7 @@
   function load() { try { var s = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null'); if (s && s.v === 1) return Object.assign({}, JSON.parse(JSON.stringify(defaults)), s); } catch (e) {} return JSON.parse(JSON.stringify(defaults)); }
   function persist() { try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch (e) {} }
   function unlockedLevels() { return Math.min(D.LEVELS.length, save.stars.filter(function (x) { return x > 0; }).length + 1); }
-  Ads.removed = save.removeAds; Sfx.setMuted(save.muted); Sfx.setMusic(save.music !== false); R.hat = save.hat;
+  Ads.removed = save.removeAds; if (Ads.init) Ads.init(); Sfx.setMuted(save.muted); Sfx.setMusic(save.music !== false); R.hat = save.hat;
 
   // ---------- canvas ----------
   var cv = $('#game'), ctx = cv.getContext('2d'), dpr = 1, W = 0, H = 0;
@@ -262,6 +262,7 @@
 
   // ---------- screens ----------
   var screen = 'title';
+  var mapWorld = 0;
   function show(name) {
     screen = name; document.body.dataset.screen = name;
     ['title', 'map', 'upgrades', 'shop'].forEach(function (n) { $('#scr-' + n).hidden = n !== name; });
@@ -279,16 +280,36 @@
       '<div class="foot"><button class="iconbtn" data-go="sound" aria-label="Sound">' + (save.muted ? ICON.mute : ICON.sound) + '</button><button class="iconbtn' + (save.music === false ? ' off' : '') + '" data-go="music" aria-label="Music">' + ICON.note + '</button><span>\u00A9 2026 Jonidge \u00B7 jonidge@yahoo.com</span></div>';
     show('title'); drawIcons('#scr-title');
   }
-  function showMap() {
+  function worldUnlocks() {
+    var un = unlockedLevels(), first = [];
+    D.LEVELS.forEach(function (L, i) { if (first[L.world] == null) first[L.world] = i; });
+    return first.map(function (start) { return un > start; });
+  }
+  function showMap(worldIdx) {
     var un = unlockedLevels(), total = save.stars.reduce(function (a, b) { return a + (b || 0); }, 0);
-    var nodes = '';
-    D.LEVELS.forEach(function (L, i) {
-      var locked = i >= un, s = save.stars[i] || 0, st = '';
-      for (var k = 0; k < 3; k++) st += k < s ? ICON.star : ICON.starOff;
-      nodes += '<button class="node ' + (locked ? 'locked' : '') + (L.boss ? ' boss' : '') + (i === un - 1 && !s ? ' current' : '') + '" data-level="' + i + '" style="--i:' + i + '"' + (locked ? ' disabled' : '') + '>' +
-        '<span class="num">' + (locked ? ICON.lock : i + 1) + '</span><span class="ntext"><span class="nname">' + L.name + '</span><span class="nstars">' + st + '</span></span></button>';
+    var open = worldUnlocks();
+    if (worldIdx == null) {
+      var next = D.LEVELS[Math.min(un, D.LEVELS.length) - 1];
+      mapWorld = next && next.world != null ? next.world : 0;
+    } else mapWorld = worldIdx;
+    if (!open[mapWorld]) mapWorld = open.lastIndexOf(true); if (mapWorld < 0) mapWorld = 0;
+    var W = D.WORLDS[mapWorld] || { name: 'Willow Pond' };
+    var tabs = '', nodes = '', ni = 0;
+    (D.WORLDS || []).forEach(function (w, wi) {
+      var wLocked = !open[wi], wStars = 0, wMax = 0;
+      D.LEVELS.forEach(function (L, i) { if (L.world === wi) { wMax += 3; wStars += save.stars[i] || 0; } });
+      tabs += '<button class="wtab' + (wi === mapWorld ? ' on' : '') + (wLocked ? ' locked' : '') + '" data-world="' + wi + '"' + (wLocked ? ' disabled' : '') + '>' +
+        '<b>' + w.name + '</b><span>' + (wLocked ? 'Clear world ' + wi + ' first' : (wStars + '/' + wMax + ' ' )) + '</span></button>';
     });
-    $('#scr-map').innerHTML = '<div class="top"><button class="iconbtn" data-go="title">' + ICON.back + '</button><h2>Willow Pond</h2>' + wallet() + '</div>' +
+    D.LEVELS.forEach(function (L, i) {
+      if ((L.world || 0) !== mapWorld) return;
+      var locked = i >= un, s = save.stars[i] || 0, st = '', num = (L.stage != null ? L.stage : i) + 1;
+      for (var k = 0; k < 3; k++) st += k < s ? ICON.star : ICON.starOff;
+      nodes += '<button class="node ' + (locked ? 'locked' : '') + (L.boss ? ' boss' : '') + (i === un - 1 && !s ? ' current' : '') + '" data-level="' + i + '" style="--i:' + (ni++) + '"' + (locked ? ' disabled' : '') + '>' +
+        '<span class="num">' + (locked ? ICON.lock : num) + '</span><span class="ntext"><span class="nname">' + L.name + '</span><span class="nstars">' + st + '</span></span></button>';
+    });
+    $('#scr-map').innerHTML = '<div class="top"><button class="iconbtn" data-go="title">' + ICON.back + '</button><h2>' + W.name + '</h2>' + wallet() + '</div>' +
+      '<div class="wtabs">' + tabs + '</div>' +
       '<div class="worldinfo">' + ic('star') + total + ' / ' + D.LEVELS.length * 3 + '</div><div class="nodes">' + nodes + '</div>' +
       '<div class="row map-foot"><button class="btn blue" data-go="upgrades">Upgrades</button><button class="btn pink" data-go="shop">Shop</button></div>';
     show('map');
@@ -356,6 +377,7 @@
     else if (go === 'sound') { save.muted = !save.muted; Sfx.setMuted(save.muted); persist(); showTitle(); }
     else if (go === 'music') { save.music = save.music === false; Sfx.setMusic(save.music); persist(); showTitle(); }
     else if (go === 'daily') { save.daily = new Date().toISOString().slice(0, 10); save.flies += 30; save.pearls += 3; persist(); toast('Daily gift: +30 flies, +3 pearls!'); Sfx.play('upgrade'); showTitle(); }
+    else if (b.dataset.world != null) showMap(+b.dataset.world);
     else if (b.dataset.level != null) startLevel(+b.dataset.level);
     else if (b.dataset.up) {
       var k = b.dataset.up, U = D.UPGRADES[k], c = U.cost[save.up[k] || 0];
@@ -400,6 +422,6 @@
   window.__ll = {
     get state() { return G; }, get save() { return save; }, get screen() { return screen; },
     step: function (n) { for (var i = 0; i < n && G && G.status === 'play'; i++) E.step(G, 1 / 60); },
-    start: startLevel, build: function (pi, type) { return E.build(G, pi, type); }
+    start: startLevel, build: function (pi, type) { return E.build(G, pi, type); }, showMap: showMap
   };
 })();

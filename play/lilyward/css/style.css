@@ -112,6 +112,12 @@ canvas.ficon{width:52px;height:52px}canvas.ficon.sm{width:36px;height:36px}canva
 .foot{display:flex;align-items:center;gap:10px;font-size:12px;opacity:.85;width:100%;max-width:340px}
 .top{display:flex;align-items:center;gap:10px;width:100%;max-width:420px;margin-bottom:8px}.top h2{font-size:26px;flex:1}
 .wallet{display:flex;gap:6px}.wallet>span{background:rgba(8,50,58,.55);padding:5px 10px;border-radius:14px;font-family:"Lilita One";font-size:16px;white-space:nowrap}
+.wtabs{display:flex;gap:6px;width:100%;max-width:380px;margin:0 0 6px}
+.wtab{flex:1;border-radius:14px;padding:7px 8px 6px;background:rgba(8,50,58,.4);color:#E8F4F0;text-align:center;box-shadow:inset 0 -3px 0 rgba(0,0,0,.2)}
+.wtab b{display:block;font-family:"Lilita One";font-size:14px;font-weight:400;line-height:1.1}
+.wtab span{display:block;font-size:10px;opacity:.8;margin-top:2px}
+.wtab.on{background:#1E7A6A;box-shadow:0 3px 0 #0E4A40}
+.wtab.locked{opacity:.45}
 .worldinfo{font-family:"Lilita One";font-size:18px;background:rgba(8,50,58,.45);border-radius:14px;padding:4px 12px;margin-bottom:6px}
 .nodes{position:relative;width:100%;max-width:380px;flex:1;display:flex;flex-direction:column-reverse;gap:6px;padding:6px 0}
 .node{width:250px;display:flex;align-items:center;gap:12px;background:rgba(8,50,58,.45);border-radius:40px;padding:5px 16px 5px 5px;text-align:left;animation:pop .4s backwards;animation-delay:calc(var(--i) * 50ms);align-self:flex-start;margin-left:4%}

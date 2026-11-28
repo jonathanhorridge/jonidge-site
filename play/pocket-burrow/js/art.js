@@ -1,5 +1,8 @@
 /* Pocket Burrow art: everything is drawn in code (canvas 2D), no image files, no third-party art.
- * Soft storybook look: warm palette, rounded shapes, darker-tint outlines, gentle gradients, lots of idle motion.
+ * v0.3 signature look, "paper-cut storybook": the burrow is a stack of hand-cut paper layers in a dusk-plum palette.
+ * Chambers are organic, hand-cut pods with cream paper rims and a soft cast shadow, joined by round tunnels and root
+ * ladders (no square grid). Critters wear a cream paper-cut rim like little puppets. Warm room interiors glow against
+ * the cool plum soil. Signature palette: plum soil, cream paper, saffron lantern light, moss trim (PAPER below).
  * Functions draw in local coordinates (cell origin = top-left of a 90x88 cell, critter origin = feet centre). */
 (function (root) {
   'use strict';
@@ -25,15 +28,36 @@
   //  CRITTERS
   // =====================================================================================================
   /** st: { t:seconds, dir:+1/-1, walk:0..1, seed:number, happy:0..1, hop:px } ; origin = feet centre. */
+  var PAPER = { cream: '#f6e7cb', creamDk: '#dcc39c', ink: '#2a1b2e', plum: ['#7a4c62', '#64405a', '#4e3450', '#3a2a46', '#2b2138'], saffron: '#f4b544', moss: '#7fa35a', mossDk: '#4f7a3a', bg: '#241a2c' };
+  var _buf = null, RIM = true;
+  /** Critter with a cream paper-cut rim (drawn once to a small buffer, then stamped with a soft cream halo). */
   function drawCritter(c, look, st) {
+    if (!RIM || st.rim === false || typeof document === 'undefined' || !c.getTransform) return drawCritterRaw(c, look, st);
+    var m = c.getTransform(), k = Math.sqrt(m.a * m.a + m.b * m.b); if (!(k > 0)) return drawCritterRaw(c, look, st);
+    var s = (look.big || 1) * (st.scale || 1), hop = st.hop || 0, bw = Math.ceil(72 * s * k), bh = Math.ceil((84 * s + hop) * k);
+    if (bw < 4 || bh < 4 || bw > 1200 || bh > 1200) return drawCritterRaw(c, look, st);
+    if (!_buf) _buf = document.createElement('canvas');
+    if (_buf.width < bw || _buf.height < bh) { _buf.width = Math.max(_buf.width, bw); _buf.height = Math.max(_buf.height, bh); }
+    var b = _buf.getContext('2d'), fx = 36 * s * k, fy = bh - 14 * s * k;
+    b.setTransform(1, 0, 0, 1, 0, 0); b.clearRect(0, 0, bw + 2, bh + 2); b.setTransform(k, 0, 0, k, fx, fy);
+    var o = {}; for (var key in st) o[key] = st[key]; o.x = 0; o.y = 0; o.noShadow = true;
+    drawCritterRaw(b, look, o);
+    // ground shadow on the main canvas, then the rimmed critter
+    c.save(); c.translate(st.x || 0, st.y || 0); c.scale(s, s); c.fillStyle = 'rgba(30,12,30,.28)'; ell(c, 0, 0, 12 * (1 - hop / 40), 3); c.fill(); c.restore();
+    var dx = m.a * (st.x || 0) + m.c * (st.y || 0) + m.e - fx, dy = m.b * (st.x || 0) + m.d * (st.y || 0) + m.f - fy;
+    c.save(); c.setTransform(1, 0, 0, 1, 0, 0);
+    c.shadowColor = PAPER.cream; c.shadowBlur = Math.max(1.5, 2.6 * k * s); c.shadowOffsetX = 0; c.shadowOffsetY = 0;
+    c.drawImage(_buf, 0, 0, bw, bh, dx, dy, bw, bh); c.drawImage(_buf, 0, 0, bw, bh, dx, dy, bw, bh);
+    c.shadowColor = 'transparent'; c.restore();
+  }
+  function drawCritterRaw(c, look, st) {
     var t = st.t, seed = st.seed || 0, dir = st.dir || 1, walk = st.walk || 0, hop = st.hop || 0;
     var sc = (look.big || 1) * (st.scale || 1);
     var slp = !!st.sleep;
     var bob = sin(t * (walk ? 11 : slp ? 1.1 : 2.2) + seed) * (walk ? 1.4 : slp ? .5 : .9);
     var squash = 1 + sin(t * (slp ? 1.1 : 2.2) + seed) * (slp ? .04 : .025);
     c.save(); c.translate(st.x || 0, (st.y || 0) - hop); c.scale(dir * sc, sc);
-    // soft shadow
-    c.fillStyle = 'rgba(40,20,10,.22)'; ell(c, 0, 0, 12 * (1 - hop / 40), 3); c.fill();
+    if (!st.noShadow) { c.fillStyle = 'rgba(40,20,10,.22)'; ell(c, 0, 0, 12 * (1 - hop / 40), 3); c.fill(); }
     var blink = slp || (t * .8 + seed * 1.7) % 4.6 > 4.45;
     var fn = ARCH[look.arch] || ARCH.furry;
     fn(c, look, t, seed, walk, bob, squash, blink, st);
@@ -371,8 +395,8 @@
 
   // empty dug room: a cosy tunnel chamber
   function drawEmptyCell(c, t, w, h, pulse) {
-    var g = c.createLinearGradient(0, 0, 0, h); g.addColorStop(0, '#6a4a3a'); g.addColorStop(1, '#4a3228'); c.fillStyle = g; c.fillRect(0, 0, w, h);
-    c.fillStyle = '#3a2820'; c.fillRect(0, h - 10, w, 10); c.fillStyle = 'rgba(255,255,255,.07)'; c.fillRect(0, h - 10, w, 1.4);
+    var g = c.createLinearGradient(0, 0, 0, h); g.addColorStop(0, '#62445a'); g.addColorStop(1, '#433046'); c.fillStyle = g; c.fillRect(0, 0, w, h);
+    c.fillStyle = '#33233a'; c.fillRect(0, h - 10, w, 10); c.fillStyle = 'rgba(255,255,255,.07)'; c.fillRect(0, h - 10, w, 1.4);
     c.strokeStyle = 'rgba(60,35,20,.5)'; c.lineWidth = 1.6; c.beginPath(); c.moveTo(14, 0); c.quadraticCurveTo(18, 8, 13, 15); c.moveTo(72, 0); c.quadraticCurveTo(68, 9, 74, 18); c.stroke();
     // tiny lamp
     var f = .8 + sin(t * 4 + 1) * .08; glow(c, 45, 14, 20, '#ffd48a', .38 * f); ell(c, 45, 12, 3, 3.6); fillStroke(c, '#ffe9a8', '#a07a2a', .8);
@@ -385,7 +409,63 @@
     rr(c, 62, h - 44, 20, 34, 4); fillStroke(c, '#7a7a82', '#44444c'); c.fillStyle = '#1e1410'; rr(c, 65, h - 30, 14, 20, 6); c.fill(); var f = .6 + .2 * sin(t * 8); glow(c, 72, h - 18, 14, '#ff9a3a', f); c.fillStyle = '#ffb347'; c.beginPath(); c.moveTo(68, h - 10); c.quadraticCurveTo(70, h - 22 - f * 4, 72, h - 13); c.quadraticCurveTo(74, h - 20 - f * 3, 76, h - 10); c.fill();
     c.strokeStyle = '#5a3a2a'; c.lineWidth = 2; c.beginPath(); c.moveTo(10, 22); c.lineTo(10, 40); c.stroke(); c.fillStyle = '#d9534f'; c.beginPath(); c.arc(10, 42, 4, 0, TAU); c.fill();
   }
-  function drawRoom(c, roomId, t, w, h) { c.save(); rr(c, 0, 0, w, h, 0); c.clip(); (ROOMART[roomId] || drawEmptyCell)(c, t, w, h); c.restore(); }
+  function drawRoom(c, roomId, t, w, h) { (ROOMART[roomId] || drawEmptyCell)(c, t, w, h); }
+
+  // =====================================================================================================
+  //  PAPER-CUT BURROW SHELL: hand-cut chamber pods, tunnels, root ladders, tags
+  // =====================================================================================================
+  /** A hand-cut chamber: domed roof, bowed walls, flat floor. Same seed -> same wobble, so it never jitters. */
+  function podPath(c, w, h, seed, inset) {
+    var i = (inset == null ? 4 : inset) + hash(seed * 5.3) * 3; function j(k) { return (hash(seed * 13.7 + k) - .5) * 3.4; }
+    var L = i + j(1), R = w - i + j(2), T = i + 2 + hash(seed * 2.9) * 7, B = h - 3 + j(4) * .3, mid = w / 2 + j(5) * 3, sh = 18 + hash(seed * 7.1) * 10;
+    c.beginPath();
+    c.moveTo(L + 12, B);
+    c.quadraticCurveTo(L - 1, B, L + j(6) * .4, B - 12);
+    c.bezierCurveTo(L - 3 + j(7) * .6, B - 34, L - 1, T + sh + 6, L + sh * .55 + j(8), T + sh * .35);
+    c.bezierCurveTo(L + sh * 1.1, T - 2 + j(9), R - sh * 1.1, T - 2 + j(13), R - sh * .55 + j(10), T + sh * .35);
+    c.bezierCurveTo(R + 1, T + sh + 6, R + 3 + j(11) * .6, B - 34, R + j(12) * .4, B - 12);
+    c.quadraticCurveTo(R + 1, B, R - 12, B);
+    c.closePath();
+  }
+  function tunnelPath(c, kind, w, h) {   // local to the upper/left cell of the pair
+    if (kind === 'h') { rr(c, w - 16, h - 34, 32, 30, 13); }
+    else { rr(c, w / 2 - 14, h - 14, 28, 30, 12); }
+  }
+  /** pass: 'shadow' | 'rim' | 'fill'. Draws one shell piece in local cell coordinates. */
+  function shellPiece(c, pass, piece, w, h) {
+    var path = function () { if (piece.pod) podPath(c, w, h, piece.seed); else tunnelPath(c, piece.kind, w, h); };
+    if (pass === 'shadow') { c.save(); c.translate(2.5, 4); path(); c.fillStyle = 'rgba(16,6,20,.5)'; c.fill(); c.restore(); }
+    else if (pass === 'rim') { path(); c.lineJoin = 'round'; c.lineWidth = 9; c.strokeStyle = PAPER.ink; c.stroke(); c.lineWidth = 6.5; c.strokeStyle = PAPER.cream; c.stroke(); }
+    else if (pass === 'fill') {
+      path(); var g = c.createLinearGradient(0, h - 40, 0, h + 20); g.addColorStop(0, '#4a3040'); g.addColorStop(1, '#33222f'); c.fillStyle = g; c.fill();
+      if (piece.kind === 'v') { // root ladder
+        var x = w / 2; c.strokeStyle = '#8a6a4a'; c.lineCap = 'round'; c.lineWidth = 2.2;
+        c.beginPath(); c.moveTo(x - 7, h - 16); c.quadraticCurveTo(x - 9, h, x - 7, h + 18); c.moveTo(x + 7, h - 16); c.quadraticCurveTo(x + 9, h, x + 7, h + 18); c.stroke();
+        c.lineWidth = 1.8; c.strokeStyle = '#b08a5a'; for (var r = -10; r <= 12; r += 7) { c.beginPath(); c.moveTo(x - 7.5, h + r); c.lineTo(x + 7.5, h + r + .8); c.stroke(); }
+        c.fillStyle = PAPER.moss; ell(c, x + 9, h - 8, 3, 1.6, -.6); c.fill();
+      } else { c.fillStyle = 'rgba(255,230,190,.12)'; rr(c, w - 14, h - 9, 28, 3, 1.5); c.fill(); }
+    }
+  }
+  /** Soft cave vignette over a chamber interior (call while clipped to the pod). */
+  function podVignette(c, w, h) {
+    var g = c.createRadialGradient(w / 2, h * .58, w * .18, w / 2, h * .55, w * .78);
+    g.addColorStop(0, 'rgba(36,14,36,0)'); g.addColorStop(1, 'rgba(36,14,36,.42)'); c.fillStyle = g; c.fillRect(0, 0, w, h);
+  }
+  /** Diggable spot: a pencil-sketched, stitched outline of a future chamber. */
+  function podSketch(c, w, h, seed, t, locked) {
+    podPath(c, w, h, seed, 9); c.fillStyle = locked ? 'rgba(10,4,16,.25)' : 'rgba(246,231,203,' + (.07 + .04 * sin(t * 3 + seed)) + ')'; c.fill();
+    c.setLineDash([2.5, 4.5]); c.lineDashOffset = -t * 5; c.lineCap = 'round'; c.lineWidth = 2; c.strokeStyle = locked ? 'rgba(246,231,203,.28)' : 'rgba(246,231,203,.8)'; c.stroke(); c.setLineDash([]);
+  }
+  /** Hanging paper name tag pinned on the chamber's floor rim, with level pips. */
+  function roomTag(c, text, x, y, lvl, max, seed) {
+    c.save(); c.translate(x, y); c.rotate((hash(seed * 3.1) - .5) * .09);
+    c.font = '600 8.5px Fredoka,sans-serif'; var tw = Math.max(c.measureText(text).width + 12, 8 * max), hh = 17;
+    c.fillStyle = 'rgba(16,6,20,.35)'; rr(c, -tw / 2 + 1.5, -hh / 2 + 2, tw, hh, 4); c.fill();
+    rr(c, -tw / 2, -hh / 2, tw, hh, 4); fillStroke(c, PAPER.cream, PAPER.ink, 1.1);
+    c.fillStyle = PAPER.ink; c.textAlign = 'center'; c.fillText(text, 0, -.5);
+    for (var p = 0; p < max; p++) { c.fillStyle = p < lvl ? PAPER.saffron : 'rgba(42,27,46,.22)'; c.beginPath(); c.arc((p - (max - 1) / 2) * 5.5, 5, 1.7, 0, TAU); c.fill(); }
+    c.restore();
+  }
 
   // =====================================================================================================
   //  SURFACE
@@ -516,18 +596,41 @@
     }
   }
 
-  // ---------- soil background (cached by the app) ----------
-  function drawSoilTexture(c, W, H, y0, strata) {
-    var g = c.createLinearGradient(0, y0, 0, H);
-    g.addColorStop(0, '#8a6244'); g.addColorStop(.38, '#79503a'); g.addColorStop(.55, '#a0623a'); g.addColorStop(.72, '#8a5430'); g.addColorStop(.78, '#5a4a52'); g.addColorStop(1, '#3d3440');
-    c.fillStyle = g; c.fillRect(0, y0, W, H - y0);
-    for (var i = 0; i < 520; i++) { var x = hash(i) * W, y = y0 + hash(i + 77) * (H - y0), r = .8 + hash(i + 3) * 2.8; var f = (y - y0) / (H - y0); c.fillStyle = hash(i + 9) > .5 ? 'rgba(255,230,190,' + (.05 + hash(i + 4) * .08) + ')' : 'rgba(30,15,5,' + (.1 + hash(i + 4) * .14) + ')'; ell(c, x, y, r * 1.4, r, hash(i) * 3); c.fill(); }
-    // pebbles
-    for (var p = 0; p < 70; p++) { var px = hash(p + 200) * W, py = y0 + hash(p + 300) * (H - y0), pr = 2 + hash(p + 400) * 4; var base = (py - y0) / (H - y0) > .7 ? '#7a7a88' : '#b79a7a'; ell(c, px, py, pr * 1.2, pr); fillStroke(c, base, shade(base, -.4), .8); c.fillStyle = 'rgba(255,255,255,.25)'; ell(c, px - pr * .3, py - pr * .3, pr * .4, pr * .3); c.fill(); }
-    // roots & worms
-    c.lineCap = 'round'; for (var r = 0; r < 10; r++) { c.strokeStyle = 'rgba(70,40,20,' + (.25 + hash(r) * .2) + ')'; c.lineWidth = 1 + hash(r + 5) * 1.6; var rx = hash(r + 40) * W, ry = y0 + hash(r + 50) * 200; c.beginPath(); c.moveTo(rx, ry); c.bezierCurveTo(rx + 20, ry + 30, rx - 20, ry + 50, rx + 10 + hash(r) * 20, ry + 90); c.stroke(); }
-    // grass lip along the top
-    c.fillStyle = '#5a8a3a'; c.fillRect(0, y0 - 2, W, 5);
+  // ---------- soil background (cached by the app): stacked hand-cut paper layers in dusk plum ----------
+  function wavy(c, W, y, amp, seed, step) { c.moveTo(0, y); for (var x = 0; x <= W + step; x += step) c.lineTo(x, y + sin(x * .045 + seed) * amp + (hash(seed + x) - .5) * amp * .6); }
+  function drawSoilTexture(c, W, H, y0, strataRows, CHt) {
+    CHt = CHt || 88;
+    var rows = strataRows || [0, 3, 6], bands = [];
+    // a few decorative paper bands between the real strata
+    var cols = PAPER.plum, edges = [y0, y0 + CHt * 1.45, y0 + rows[1] * CHt - 6, y0 + CHt * 4.6, y0 + rows[2] * CHt - 6, y0 + CHt * 7.5];
+    edges.forEach(function (ey, i) { bands.push({ y: ey, col: cols[Math.min(i, cols.length - 1)], seed: i * 1.7 + .4 }); });
+    c.fillStyle = PAPER.bg; c.fillRect(0, y0, W, H - y0);
+    bands.forEach(function (bd, i) {
+      c.save(); c.shadowColor = 'rgba(12,4,16,.55)'; c.shadowBlur = 10; c.shadowOffsetY = -3;
+      c.beginPath(); wavy(c, W, bd.y, i ? 5 : 2, bd.seed, 9); c.lineTo(W, H); c.lineTo(0, H); c.closePath(); c.fillStyle = bd.col; c.fill(); c.restore();
+      c.save(); c.beginPath(); wavy(c, W, bd.y, i ? 5 : 2, bd.seed, 9); c.lineWidth = 1.4; c.strokeStyle = 'rgba(246,231,203,.22)'; c.stroke(); c.restore();
+      // paper grain speckles in this band
+      var nb = bands[i + 1] ? bands[i + 1].y : H;
+      for (var k = 0; k < 90; k++) { var x = hash(i * 300 + k) * W, y = bd.y + 6 + hash(i * 300 + k + 1) * (nb - bd.y - 6); c.fillStyle = hash(i * 300 + k + 2) > .55 ? 'rgba(246,231,203,.07)' : 'rgba(10,2,14,.16)'; ell(c, x, y, .7 + hash(k + i) * 1.6, .6 + hash(k + i + 9) * 1.1); c.fill(); }
+    });
+    // paper-cut pebbles, buried treasures and curling roots
+    for (var p = 0; p < 46; p++) { var px = hash(p + 200) * W, py = y0 + 30 + hash(p + 300) * (H - y0 - 40), pr = 2 + hash(p + 400) * 3.6, base = mixc(PAPER.plum[1], PAPER.cream, .25 + hash(p) * .2);
+      ell(c, px + 1, py + 1.5, pr * 1.25, pr * .9); c.fillStyle = 'rgba(12,4,16,.35)'; c.fill(); ell(c, px, py, pr * 1.25, pr * .9); fillStroke(c, base, 'rgba(42,27,46,.6)', .7); }
+    var trinkets = [[.12, 2.2, 'shell'], [.86, 3.6, 'acorn'], [.5, 5.4, 'fern'], [.18, 6.8, 'shell'], [.78, 7.6, 'gem'], [.4, 1.2, 'acorn']];
+    trinkets.forEach(function (tr, i) { var x = tr[0] * W, y = y0 + tr[1] * CHt; c.save(); c.translate(x, y); c.globalAlpha = .55; c.strokeStyle = PAPER.cream; c.fillStyle = 'rgba(246,231,203,.12)'; c.lineWidth = 1.1;
+      if (tr[2] === 'shell') { c.beginPath(); for (var a = 0; a < 12; a += .3) { var r = 1 + a * .55; c.lineTo(cos(a) * r, sin(a) * r); } c.stroke(); }
+      else if (tr[2] === 'acorn') { ell(c, 0, 2, 3.4, 4); c.fill(); c.stroke(); rr(c, -4, -3, 8, 3, 1.5); c.stroke(); }
+      else if (tr[2] === 'fern') { c.beginPath(); c.moveTo(0, 8); c.quadraticCurveTo(2, 0, 0, -8); for (var f = -6; f < 7; f += 2.5) { c.moveTo(0.6, f); c.lineTo(4.5, f - 2); c.moveTo(0.3, f); c.lineTo(-4, f - 2); } c.stroke(); }
+      else { c.beginPath(); c.moveTo(0, -5); c.lineTo(4, 0); c.lineTo(0, 5); c.lineTo(-4, 0); c.closePath(); c.fillStyle = 'rgba(159,239,255,.35)'; c.fill(); c.stroke(); }
+      c.restore(); });
+    c.lineCap = 'round'; for (var r = 0; r < 9; r++) { var rx = hash(r + 40) * W, ry = y0 + 4 + hash(r + 50) * 40; c.lineWidth = 1.2 + hash(r + 5) * 1.4; c.strokeStyle = 'rgba(246,231,203,' + (.12 + hash(r) * .1) + ')';
+      c.beginPath(); c.moveTo(rx, ry); c.bezierCurveTo(rx + 16, ry + 26, rx - 18, ry + 46, rx + 6, ry + 74 + hash(r + 7) * 50); c.stroke();
+      c.beginPath(); c.moveTo(rx + 2, ry + 30); c.quadraticCurveTo(rx + 14, ry + 36, rx + 12, ry + 46); c.stroke(); }
+    // scalloped moss paper lip along the top
+    c.save(); c.shadowColor = 'rgba(12,4,16,.4)'; c.shadowBlur = 6; c.shadowOffsetY = 3; c.fillStyle = PAPER.moss; c.beginPath(); c.moveTo(0, y0 - 3);
+    for (var x = 0; x <= W; x += 10) c.quadraticCurveTo(x + 5, y0 + 7 + (hash(x) - .5) * 3, x + 10, y0 - 1);
+    c.lineTo(W, y0 - 6); c.lineTo(0, y0 - 6); c.closePath(); c.fill(); c.restore();
+    c.strokeStyle = PAPER.mossDk; c.lineWidth = 1; c.beginPath(); for (var x2 = 0; x2 <= W; x2 += 10) { c.moveTo(x2, y0 - 1); c.quadraticCurveTo(x2 + 5, y0 + 7 + (hash(x2) - .5) * 3, x2 + 10, y0 - 1); } c.stroke();
   }
 
   // ---------- icons (DOM) ----------
@@ -546,7 +649,7 @@
   };
 
   root.PB_ART = {
-    drawCritter: drawCritter, drawRoom: drawRoom, drawEmptyCell: drawEmptyCell, drawFoyer: drawFoyer, drawSurface: drawSurface, drawDecor: drawDecor, drawSoilTexture: drawSoilTexture,
+    drawCritter: drawCritter, drawCritterRaw: drawCritterRaw, drawRoom: drawRoom, podPath: podPath, shellPiece: shellPiece, podVignette: podVignette, podSketch: podSketch, roomTag: roomTag, PAPER: PAPER, setRim: function (v) { RIM = !!v; }, drawEmptyCell: drawEmptyCell, drawFoyer: drawFoyer, drawSurface: drawSurface, drawDecor: drawDecor, drawSoilTexture: drawSoilTexture,
     ROOM_THEME: ROOM_THEME, SEASON: SEASON, ICON: ICON, CW: CW, CH: CH, rr: rr, ell: ell, glow: glow, star: star, heart: heart, shade: shade, alpha: alpha, hash: hash, nightness: nightness, mixc: mixc, fillStroke: fillStroke
   };
 })(typeof self !== 'undefined' ? self : this);

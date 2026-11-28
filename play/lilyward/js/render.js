@@ -5,7 +5,7 @@
   var R = { particles: [], texts: [], shake: 0, flash: 0, rings: [], bg: null, bgKey: '', view: { ox: 0, oy: 0, ts: 40 }, t: 0, hat: 'none', imgs: {} };
 
   // background paintings (generated original art), loaded once
-  ['pond-day', 'pond-dusk'].forEach(function (k) {
+  ['pond-day', 'pond-dusk', 'pond-night'].forEach(function (k) {
     if (typeof Image === 'undefined') return;
     var im = new Image(); im.onload = function () { R.bgKey = ''; }; im.src = 'assets/img/' + k + '.jpg'; R.imgs[k] = im;
   });
@@ -33,7 +33,12 @@
     return R.view;
   };
   R.toTile = function (px, py) { var v = R.view; return { x: (px - v.ox) / v.ts, y: (py - v.oy) / v.ts }; };
-  function dusk(s) { return s.level >= 5; }
+  function themeOf(s) {
+    if (s && s.L && s.L.theme) return s.L.theme;
+    var w = s && s.L && s.L.world, W = D.WORLDS && D.WORLDS[w];
+    return (W && W.theme) || 'day';
+  }
+  function dusk(s) { var th = themeOf(s); return th === 'dusk' || th === 'night'; }
 
   function buildBg(s, dpr) {
     var v = R.view, W = v.W, H = v.H, cv = document.createElement('canvas');
@@ -43,7 +48,7 @@
     var g = c.createLinearGradient(0, 0, 0, H);
     if (night) { g.addColorStop(0, '#1C3F66'); g.addColorStop(1, '#0F2C45'); } else { g.addColorStop(0, '#1F9E95'); g.addColorStop(1, '#13707E'); }
     c.fillStyle = g; c.fillRect(0, 0, W, H);
-    var im = R.imgs[night ? 'pond-dusk' : 'pond-day'];
+    var im = R.imgs[themeOf(s) === 'night' ? 'pond-night' : (dusk(s) ? 'pond-dusk' : 'pond-day')];
     if (im && im.complete && im.naturalWidth) {
       // cover + zoom so the painted banks sit just outside the board
       var sc = Math.max(W / im.naturalWidth, H / im.naturalHeight) * 1.28, iw = im.naturalWidth * sc, ih = im.naturalHeight * sc;
@@ -264,6 +269,7 @@
     var flash = e.hitT > 0, squash = 1 + Math.sin(e.wob * 2) * 0.05;
     c.save();
     if (e.E.air) { ell(c, x + ts * 0.15, y + ts * 0.35, r * 0.9, r * 0.4, 'rgba(0,30,30,0.25)'); y -= ts * 0.18 + Math.sin(now * 6 + e.id) * 2; }
+    if (e.hopT > 0) y -= ts * 0.35 * Math.sin((e.hopT / 0.28) * Math.PI);
     else ell(c, x, y + r * 0.35, r * 0.95, r * 0.45, 'rgba(0,0,0,0.25)');
     c.translate(x, y); c.rotate(ang); c.scale(squash, 2 - squash);
     var leg = Math.sin(e.wob) * r * 0.25;
@@ -326,6 +332,77 @@
       c.fillStyle = '#F2B233'; c.beginPath(); c.moveTo(r * 1.02, -r * 0.07); c.lineTo(r * 1.55, 0); c.lineTo(r * 1.02, r * 0.07); c.fill();
       circle(c, r * 0.94, -r * 0.09, r * 0.045, '#C62828'); circle(c, r * 0.94, r * 0.09, r * 0.045, '#C62828');
       c.strokeStyle = '#1C2530'; c.lineWidth = r * 0.06; c.beginPath(); c.moveTo(r * 0.82, -r * 0.05); c.lineTo(r * 0.45, -r * 0.3); c.moveTo(r * 0.82, r * 0.05); c.lineTo(r * 0.45, r * 0.3); c.stroke();
+    } else if (e.type === 'skip') {
+      // Reed Skipper: long-legged water strider, olive-brown, skates on six thin legs
+      var sk = Math.sin(e.wob * 2) * r * 0.35;
+      c.strokeStyle = tint('#2A2418'); c.lineWidth = Math.max(1, r * 0.08); c.lineCap = 'round';
+      for (var si = 0; si < 3; si++) {
+        var sx = (si - 1) * r * 0.45, outward = (si === 1 ? 1.15 : 1) * r * 1.15;
+        c.beginPath(); c.moveTo(sx, 0); c.lineTo(sx + sk, -outward); c.moveTo(sx, 0); c.lineTo(sx - sk, outward); c.stroke();
+        circle(c, sx + sk, -outward, r * 0.07, tint('#3A3222')); circle(c, sx - sk, outward, r * 0.07, tint('#3A3222'));
+      }
+      blob(c, -r * 0.15, 0, r * 0.7, r * 0.18, tint('#6B5A32'));
+      blob(c, r * 0.45, 0, r * 0.28, r * 0.2, tint('#5A4A28'));
+      circle(c, r * 0.58, -r * 0.08, r * 0.07, '#111'); circle(c, r * 0.58, r * 0.08, r * 0.07, '#111');
+    } else if (e.type === 'pinch') {
+      // Pinchclaw: rust-red crayfish with big claws and a segmented tail
+      c.strokeStyle = tint('#6A2A1A'); c.lineWidth = Math.max(1, r * 0.1);
+      for (var pi = 0; pi < 4; pi++) { var px = -r * 0.1 + pi * r * 0.22, ph = (pi % 2 ? 1 : -1) * leg; c.beginPath(); c.moveTo(px, -r * 0.15); c.lineTo(px + ph, -r * 0.85); c.moveTo(px, r * 0.15); c.lineTo(px - ph, r * 0.85); c.stroke(); }
+      blob(c, -r * 0.55, 0, r * 0.55, r * 0.32, tint('#C45A32'));
+      for (var sg = 0; sg < 3; sg++) blob(c, -r * 0.15 - sg * r * 0.22, 0, r * 0.22, r * 0.28 - sg * 0.03, tint(sg % 2 ? '#A84828' : '#C45A32'));
+      blob(c, r * 0.35, 0, r * 0.32, r * 0.28, tint('#D4683A'));
+      // claws
+      c.fillStyle = tint('#E07A48');
+      c.beginPath(); c.ellipse(r * 0.85, -r * 0.45, r * 0.38, r * 0.18, -0.4, 0, Math.PI * 2); c.fill();
+      c.beginPath(); c.ellipse(r * 0.85, r * 0.45, r * 0.38, r * 0.18, 0.4, 0, Math.PI * 2); c.fill();
+      c.strokeStyle = tint('#7A3018'); c.lineWidth = r * 0.07;
+      c.beginPath(); c.moveTo(r * 0.55, -r * 0.35); c.lineTo(r * 1.15, -r * 0.7); c.moveTo(r * 0.55, r * 0.35); c.lineTo(r * 1.15, r * 0.7); c.stroke();
+      bugEyes(r * 0.45, r * 0.09);
+    } else if (e.type === 'moth') {
+      var mf = Math.sin(now * 28 + e.id) * 0.35;
+      c.globalAlpha = 0.75;
+      ell(c, 0, -r * 0.7, r * 0.85, r * 0.42, tint('#E8D5A0'), -0.2 + mf);
+      ell(c, 0, r * 0.7, r * 0.85, r * 0.42, tint('#E8D5A0'), 0.2 - mf);
+      ell(c, -r * 0.15, -r * 0.55, r * 0.45, r * 0.22, tint('#C9B07A'), 0.3 - mf);
+      ell(c, -r * 0.15, r * 0.55, r * 0.45, r * 0.22, tint('#C9B07A'), -0.3 + mf);
+      c.globalAlpha = 1;
+      circle(c, -r * 0.25, -r * 0.55, r * 0.1, 'rgba(80,50,20,0.35)'); circle(c, -r * 0.25, r * 0.55, r * 0.1, 'rgba(80,50,20,0.35)');
+      blob(c, -r * 0.1, 0, r * 0.7, r * 0.22, tint('#5C4A32'));
+      blob(c, r * 0.45, 0, r * 0.28, r * 0.22, tint('#3E3224'));
+      c.strokeStyle = tint('#D8C48A'); c.lineWidth = 1.2;
+      c.beginPath(); c.moveTo(r * 0.6, -r * 0.08); c.quadraticCurveTo(r * 1.05, -r * 0.45, r * 1.15, -r * 0.2);
+      c.moveTo(r * 0.6, r * 0.08); c.quadraticCurveTo(r * 1.05, r * 0.45, r * 1.15, r * 0.2); c.stroke();
+      circle(c, r * 0.6, -r * 0.1, r * 0.08, '#F6E7A0'); circle(c, r * 0.6, r * 0.1, r * 0.08, '#F6E7A0');
+    } else if (e.type === 'snap') {
+      // Old Snapjaw: mossy snapping turtle, hooked beak, heavy shell
+      var stride = Math.sin(e.wob * 0.45);
+      c.strokeStyle = tint('#3A4A28'); c.lineWidth = r * 0.1; c.lineCap = 'round';
+      c.beginPath(); c.moveTo(r * 0.1, -r * 0.35); c.lineTo(r * 0.55 + stride * r * 0.2, -r * 0.75);
+      c.moveTo(r * 0.1, r * 0.35); c.lineTo(r * 0.55 - stride * r * 0.2, r * 0.75);
+      c.moveTo(-r * 0.2, -r * 0.4); c.lineTo(-r * 0.6, -r * 0.7); c.moveTo(-r * 0.2, r * 0.4); c.lineTo(-r * 0.6, r * 0.7); c.stroke();
+      blob(c, -r * 0.05, 0, r * 0.95, r * 0.78, tint('#4A6A38'));
+      c.strokeStyle = tint('#2E4A24'); c.lineWidth = r * 0.06;
+      for (var sc = 0; sc < 6; sc++) { var a = sc * 1.05, rr = r * 0.55; c.beginPath(); c.arc(-r * 0.05 + Math.cos(a) * r * 0.15, Math.sin(a) * r * 0.15, r * 0.22, 0, Math.PI * 2); c.stroke(); }
+      ell(c, -r * 0.35, -r * 0.3, r * 0.2, r * 0.08, 'rgba(180,220,120,0.35)', -0.4);
+      blob(c, r * 0.75, 0, r * 0.42, r * 0.32, tint('#6B7A40'));
+      c.fillStyle = tint('#C9B45A'); c.beginPath(); c.moveTo(r * 1.05, -r * 0.12); c.lineTo(r * 1.55, 0); c.lineTo(r * 1.05, r * 0.12); c.fill();
+      c.fillStyle = tint('#8A6A28'); c.beginPath(); c.moveTo(r * 1.05, -r * 0.04); c.lineTo(r * 1.35, 0); c.lineTo(r * 1.05, r * 0.04); c.fill();
+      circle(c, r * 0.88, -r * 0.12, r * 0.06, '#1A200C'); circle(c, r * 0.88, r * 0.12, r * 0.06, '#1A200C');
+    } else if (e.type === 'bittern') {
+      // Pale Bittern: silvery-buff skulking heron, streaked, dagger beak — distinct from grey Stiltbeak
+      var stride = Math.sin(e.wob * 0.5);
+      c.strokeStyle = tint('#C9B07A'); c.lineWidth = r * 0.07; c.lineCap = 'round';
+      c.beginPath(); c.moveTo(0, -r * 0.2); c.lineTo(r * 0.4 * stride, -r * 0.58); c.moveTo(0, r * 0.2); c.lineTo(-r * 0.4 * stride, r * 0.58); c.stroke();
+      blob(c, -r * 0.1, 0, r * 0.72, r * 0.42, tint('#E8D9B0'));
+      c.strokeStyle = 'rgba(80,60,30,0.45)'; c.lineWidth = r * 0.07;
+      for (var st = -2; st <= 2; st++) { c.beginPath(); c.moveTo(-r * 0.6, st * r * 0.12); c.lineTo(r * 0.35, st * r * 0.08); c.stroke(); }
+      blob(c, -r * 0.45, -r * 0.28, r * 0.5, r * 0.18, tint('#D4C08C')); blob(c, -r * 0.45, r * 0.28, r * 0.5, r * 0.18, tint('#D4C08C'));
+      blob(c, r * 0.55, 0, r * 0.28, r * 0.24, tint('#F3E6C4'));
+      c.fillStyle = tint('#2A2014'); c.beginPath(); c.moveTo(r * 0.75, -r * 0.07); c.lineTo(r * 1.5, 0); c.lineTo(r * 0.75, r * 0.07); c.fill();
+      circle(c, r * 0.7, -r * 0.09, r * 0.055, '#6B1C1C'); circle(c, r * 0.7, r * 0.09, r * 0.055, '#6B1C1C');
+      // small ear tufts
+      c.strokeStyle = tint('#5A4A28'); c.lineWidth = r * 0.06;
+      c.beginPath(); c.moveTo(r * 0.45, -r * 0.18); c.lineTo(r * 0.3, -r * 0.38); c.moveTo(r * 0.45, r * 0.18); c.lineTo(r * 0.3, r * 0.38); c.stroke();
     }
     c.restore();
     if (e.stun > 0) { star(c, x, y - r - 6, ts * 0.06, '#FFE14D'); }
@@ -370,7 +447,7 @@
       switch (e.t) {
         case 'shoot': S.play(e.type); break;
         case 'kill':
-          var col = { ant: '#8A3B1E', gnat: '#4A4E5A', beetle: '#2E7D5B', fly: '#2B6CD6', snail: '#B5532E', heron: '#C9D3DD' }[e.type];
+          var col = { ant: '#8A3B1E', gnat: '#4A4E5A', beetle: '#2E7D5B', fly: '#2B6CD6', snail: '#B5532E', skip: '#6B5A32', pinch: '#C45A32', moth: '#E8D5A0', heron: '#C9D3DD', snap: '#4A6A38', bittern: '#E8D9B0' }[e.type];
           R.spawnParticles(px, py, e.boss ? 60 : 9, col, ts * (e.boss ? 6 : 3), ts * 0.09);
           R.spawnParticles(px, py, 3, '#FFE14D', ts * 2, ts * 0.06, { up: ts * 2, g: ts * 6 });
           R.text(px, py - 8, '+' + e.reward, '#FFE14D'); S.play('kill');
@@ -385,6 +462,9 @@
         case 'dart': R.spawnParticles(px, py, 5, '#B66DFF', ts * 1.5, ts * 0.06); break;
         case 'leak': R.shake = Math.max(R.shake, 8); R.flash = Math.max(R.flash, 0.35); R.text(px, py - 10, '-' + e.n + ' \u2665', '#FF6B6B', true); S.play('leak'); if (navigator.vibrate) try { navigator.vibrate(40); } catch (x) {} break;
         case 'stomp': R.shake = 14; R.ring(px, py, e.r * ts, 'rgba(255,255,255,0.9)'); R.spawnParticles(px, py, 30, '#9C7444', ts * 4, ts * 0.1); S.play('stomp'); break;
+        case 'hop': R.spawnParticles(px, py, 5, '#8FBFB0', ts * 1.6, ts * 0.05); S.play('pop'); break;
+        case 'pinch': R.shake = Math.max(R.shake, 7); R.ring(px, py, e.r * ts, 'rgba(255,160,100,0.9)'); R.spawnParticles(px, py, 14, '#C45A32', ts * 3, ts * 0.08); S.play('stomp'); break;
+        case 'screech': R.shake = 16; R.flash = Math.max(R.flash, 0.45); R.ring(px, py, ts * 4, 'rgba(240,220,160,0.9)'); S.play('boss'); break;
         case 'chorus': R.shake = 12; R.ring(v.W / 2, v.H / 2, v.H, 'rgba(180,255,140,0.9)'); R.ring(v.W / 2, v.H / 2, v.H * 0.6, 'rgba(255,255,200,0.9)'); S.play('croak'); break;
         case 'swat': R.spawnParticles(px, py, 6, '#FFFFFF', ts * 2, ts * 0.06); R.ring(px, py, ts * 0.4, '#FFFFFF'); S.play('swat'); break;
         case 'wave': S.play(e.boss ? 'boss' : 'wave'); if (e.bonus) R.text(v.W / 2, v.oy + ts * 2, 'Early bonus +' + e.bonus, '#FFE14D', true); break;
@@ -395,7 +475,7 @@
 
   R.draw = function (c, s, dt, sel, dpr) {
     var v = R.view, ts = v.ts, now = (R.t += dt);
-    var im = R.imgs[dusk(s) ? 'pond-dusk' : 'pond-day'];
+    var im = R.imgs[themeOf(s) === 'night' ? 'pond-night' : (dusk(s) ? 'pond-dusk' : 'pond-day')];
     if (R.bgKey !== s.level + ':' + v.W + 'x' + v.H + ':' + (im && im.complete ? 1 : 0)) buildBg(s, dpr);
     c.save();
     if (R.shake > 0) { c.translate((Math.random() - 0.5) * R.shake, (Math.random() - 0.5) * R.shake); R.shake = Math.max(0, R.shake - dt * 40); }

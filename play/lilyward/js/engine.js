@@ -59,15 +59,19 @@
     return out;
   }
 
+  function stageOf(L, i) { return L.stage != null ? L.stage : i; }
+  function worldOf(L) { return L.world || 0; }
+
   function create(levelIndex, meta) {
     meta = meta || {};
     var L = D.LEVELS[levelIndex], pads = computePads(L.path);
+    var stg = stageOf(L, levelIndex), wrd = worldOf(L);
     var s = {
       level: levelIndex, L: L, path: buildPath(L.path), pads: pads.pads, pathSet: pads.pathSet,
-      coins: 140 + levelIndex * 20 + (meta.coins || 0) * 15,
+      coins: 140 + stg * 20 + wrd * 20 + (meta.coins || 0) * 15,
       lives: 20 + (meta.lives || 0) * 2, maxLives: 20 + (meta.lives || 0) * 2,
       dmgMul: 1 + (meta.power || 0) * 0.06, chorusMul: 1 + (meta.chorus || 0) * 0.2,
-      hpMul: (1 + levelIndex * 0.11) * (L.hp || 1),
+      hpMul: (1 + stg * 0.11) * (L.hp || 1) * (1 + wrd * 0.16),
       waves: L.waves.map(parseWave), wave: 0, spawns: [], time: 0,
       enemies: [], towers: [], projectiles: [], fx: [], events: [],
       rng: (function (seed) { return function () { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; }; })(levelIndex * 7919 + 17),
@@ -82,7 +86,7 @@
   function sendWave(s) {
     if (!canSendWave(s)) return false;
     var bonus = 0;
-    if (s.status === 'play' && s.enemies.length > 0) bonus = 6 + s.level * 2;
+    if (s.status === 'play' && s.enemies.length > 0) bonus = 6 + stageOf(s.L, s.level) * 2;
     else if (s.breakT > 0) bonus = Math.ceil(s.breakT);
     s.coins += bonus; s.breakT = 0;
     var w = s.waves[s.wave], wm = 1 + s.wave * 0.06;
@@ -94,7 +98,12 @@
 
   function spawn(s, sp) {
     var E = D.ENEMIES[sp.type], hp = Math.round(E.hp * s.hpMul * sp.hpm);
-    s.enemies.push({ id: s.nextId++, type: sp.type, E: E, hp: hp, maxHp: hp, d: -0.4 - s.rng() * 0.2, slow: 0, slowT: 0, poison: 0, poisonT: 0, stun: 0, stompT: E.stomp ? E.stomp.every * 0.6 : 0, x: 0, y: 0, wob: s.rng() * 6, hitT: 0, lane: (s.rng() - 0.5) * 0.3 });
+    pushEnemy(s, sp.type, E, hp, -0.4 - s.rng() * 0.2);
+  }
+  function pushEnemy(s, type, E, hp, d) {
+    s.enemies.push({ id: s.nextId++, type: type, E: E, hp: hp, maxHp: hp, d: d, slow: 0, slowT: 0, poison: 0, poisonT: 0, stun: 0,
+      stompT: E.stomp ? E.stomp.every * 0.6 : 0, skipT: E.hop ? E.hop.every * 0.5 : 0, pinchT: E.pinch ? E.pinch.every * 0.7 : 0,
+      screechT: E.screech ? E.screech.every * 0.5 : 0, hopT: 0, x: 0, y: 0, wob: s.rng() * 6, hitT: 0, lane: (s.rng() - 0.5) * 0.3 });
   }
 
   function placeEnemy(s, e) { var p = pathPos(s.path, e.d); e.x = p.x - p.dy * e.lane; e.y = p.y + p.dx * e.lane; e.dirx = p.dx; e.diry = p.dy; }
@@ -266,15 +275,48 @@
       if (e.hp <= 0) continue;
       if (e.slowT > 0) { e.slowT -= dt; if (e.slowT <= 0) e.slow = 0; }
       if (e.stun > 0) { e.stun -= dt; placeEnemy(s, e); continue; }
+      if (e.hopT > 0) e.hopT = Math.max(0, e.hopT - dt);
       var sp = e.E.spd * (1 - (e.E.boss ? e.slow * 0.4 : e.slow));
       e.d += sp * dt; e.wob += dt * sp * 9;
+      if (e.E.hop) {
+        e.skipT -= dt;
+        if (e.skipT <= 0) {
+          e.skipT = e.E.hop.every;
+          e.d += e.E.hop.dist;
+          e.hopT = 0.28;
+          ev(s, { t: 'hop', x: e.x, y: e.y });
+        }
+      }
       placeEnemy(s, e);
       if (e.E.stomp) {
         e.stompT -= dt;
         if (e.stompT <= 0) {
           e.stompT = e.E.stomp.every;
-          s.towers.forEach(function (t) { if (inRange(t, e, e.E.stomp.radius)) { t.stun = e.E.stomp.stun; } });
+          s.towers.forEach(function (t) { if (inRange(t, e, e.E.stomp.radius)) { t.stun = Math.max(t.stun, e.E.stomp.stun); } });
           ev(s, { t: 'stomp', x: e.x, y: e.y, r: e.E.stomp.radius });
+        }
+      }
+      if (e.E.pinch) {
+        e.pinchT -= dt;
+        if (e.pinchT <= 0) {
+          e.pinchT = e.E.pinch.every;
+          var hit = 0;
+          s.towers.forEach(function (t) { if (inRange(t, e, e.E.pinch.radius)) { t.stun = Math.max(t.stun, e.E.pinch.stun); hit++; } });
+          if (hit) ev(s, { t: 'pinch', x: e.x, y: e.y, r: e.E.pinch.radius });
+        }
+      }
+      if (e.E.screech) {
+        e.screechT -= dt;
+        if (e.screechT <= 0) {
+          e.screechT = e.E.screech.every;
+          s.towers.forEach(function (t) { t.stun = Math.max(t.stun, e.E.screech.stun); });
+          ev(s, { t: 'screech', x: e.x, y: e.y });
+          var sm = e.E.screech.summon;
+          if (sm && sm.type && D.ENEMIES[sm.type]) {
+            var SE = D.ENEMIES[sm.type], hpm = 1 + Math.max(0, s.wave - 1) * 0.06;
+            var shp = Math.round(SE.hp * s.hpMul * hpm);
+            for (var n = 0; n < (sm.n || 1); n++) pushEnemy(s, sm.type, SE, shp, Math.max(0, e.d - 0.45 - n * 0.35));
+          }
         }
       }
       if (e.d >= s.path.length) {

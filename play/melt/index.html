@@ -273,7 +273,7 @@ body[data-screen=map] .toast{top:calc(124px + env(safe-area-inset-top))}
     <div class="title-buttons">
       <button class="cta" id="btnPlay">Play</button>
     </div>
-    <div class="foot">One finger. Hold the lamp's handle to heat, lift to stop.<br><span class="small" id="verLine">v0.3</span></div>
+    <div class="foot">One finger. Glim the firefly flies the lamp above your thumb: hold to heat, lift to stop.<br><span class="small" id="verLine">v0.3</span></div>
   </div>
 
   <!-- Shop -->
@@ -309,7 +309,7 @@ body[data-screen=map] .toast{top:calc(124px + env(safe-area-inset-top))}
  * Web/friends build: monetisation false => no ads, no in-app purchases, no analytics, no network calls at all.
  * App build: flip to true and replace the stubs in monetise.js with the real store/ad SDK bridges. */
 var MELT_CONFIG = {
-  version: '0.3.0',
+  version: '0.3.1',
   monetisation: false,          // <- the single switch (ads + IAP + analytics)
   contactEmail: 'jonidge@yahoo.com',
   developer: 'Jonidge'
@@ -912,7 +912,7 @@ region: alps
 solve: 1.0-2.0 @ 8.3,15.5
 goal: den
 par: 1.6
-hint: Touch and hold the ice to melt it. Puck will waddle home.
+hint: Meet Glim! Hold your thumb on the glowing spot: Glim flies the lamp above it and melts the ice.
 tap: 8.5, 15.5
 ---
 ...............
@@ -2536,7 +2536,7 @@ if (typeof module === 'object' && module.exports) module.exports = LEVELS; else 
     { id: 'scarf_streak', kind: 'scarf', name: 'Streak scarf', price: -1, note: 'Reward: 7-day streak' },
     { id: 'lamp_brass', kind: 'lamp', name: 'Brass lamp', price: 0 },
     { id: 'lamp_candle', kind: 'lamp', name: 'Candle', price: 40 },
-    { id: 'lamp_firefly', kind: 'lamp', name: 'Firefly jar', price: 80 },
+    { id: 'lamp_firefly', kind: 'lamp', name: 'Glow jar', price: 80 },
     { id: 'lamp_sun', kind: 'lamp', name: 'Little sun', price: 160 },
     // region cosmetics: on sale once Puck has reached that region
     { id: 'hat_alpine', kind: 'hat', name: 'Alpine hat', price: 70, region: 'alps' },
@@ -2837,7 +2837,7 @@ if (typeof module === 'object' && module.exports) module.exports = LEVELS; else 
     this.c = canvas; this.g = canvas.getContext('2d');
     this.dpr = 1; this.w = 0; this.h = 0; this.parts = []; this.flash = null; this.shake = 0; this.time = 0;
     this.board = { x: 0, y: 0, cs: 8 }; this.top = 96; this.bottom = 74; this.valid = false; this.cos = null;
-    this.theme = null; this.themeId = 'alps'; this.bgCache = null; this.lampOffset = 96; this.chain = null; this.wind = [];
+    this.theme = null; this.themeId = 'alps'; this.bgCache = null; this.lampOffset = 96; this.fly = null; this.wind = [];
     this.stats = { puckDrawn: 0, puckMissing: 0, resizes: 0 }; this.lastPuck = null;
     this.snow = []; for (var i = 0; i < 70; i++) this.snow.push({ x: Math.random(), y: Math.random(), s: 0.5 + Math.random() * 1.8, v: 0.01 + Math.random() * 0.03, p: Math.random() * 6 });
     this.stars = []; for (var j = 0; j < 50; j++) this.stars.push({ x: Math.random(), y: Math.random() * 0.5, s: Math.random() * 1.3 + 0.3, p: Math.random() * 6 });
@@ -2882,12 +2882,13 @@ if (typeof module === 'object' && module.exports) module.exports = LEVELS; else 
       if (need <= 0 || it === 9) { this.board = { cs: cs, x: (this.w - cs * s.W) / 2, y: by }; break; }
       cs *= 0.95;
     }
-    // whatever is left over shortens the handle (never below 56 px, so the thumb still clears the lamp)
+    // whatever is left over shortens the thumb-to-lamp offset (never below 56 px, so the thumb still clears the lamp)
     var b0 = this.board; this.lampOffset = Math.max(56, Math.min(want, bottomMax - (b0.y + (low + 1) * b0.cs)));
+    if (this.fly) this.fly.rest = null;
     this.buildStatic();
   };
   P.setLevel = function (sim) {
-    this.sim = sim; this.parts = []; this.flash = new Float32Array(sim.W * sim.H); this.layout();
+    this.sim = sim; this.parts = []; this.fly = null; this.flash = new Float32Array(sim.W * sim.H); this.layout();
   };
   P.toSim = function (px, py) { var b = this.board; return { x: Math.floor((px - b.x) / b.cs), y: Math.floor((py - b.y) / b.cs) }; };
   P.toPx = function (sx, sy) { var b = this.board; return { x: b.x + sx * b.cs, y: b.y + sy * b.cs }; };
@@ -3386,61 +3387,99 @@ if (typeof module === 'object' && module.exports) module.exports = LEVELS; else 
     }
     g.restore();
   };
-  /* The chain lamp. lamp.px/py is the exact heat point (what the sim uses). The player holds a HANDLE well below it
-   * (lamp.hx/hy, under the thumb); a pole rises beside the lamp to a hook and the lantern hangs from the hook on a
-   * short chain. The chain is a little verlet rope: it swings with your moves, but the heat point never does. */
-  P.drawLamp = function (g, lamp, dt) {
-    if (!lamp) return;
-    var cs = this.board.cs, x = lamp.px, y = lamp.py, t = this.time, skin = (this.cos && this.cos.lamp) || 'lamp_brass', L = LAMPS[skin] || LAMPS.lamp_brass, c = L.glow;
-    var alpha = lamp.on ? 1 : Math.max(0, lamp.fade == null ? 1 : lamp.fade);
-    g.save(); g.globalAlpha = alpha;
-    if (lamp.on) {
-      var R = cs * 6.5 * (1 + Math.sin(t * 20) * 0.03);
-      g.save(); g.globalCompositeOperation = 'lighter';
-      var gr = g.createRadialGradient(x, y, 0, x, y, R);
-      gr.addColorStop(0, 'rgba(' + c[0] + ',' + c[1] + ',' + c[2] + ',0.55)'); gr.addColorStop(0.45, 'rgba(' + c[0] + ',' + ((c[1] * 0.85) | 0) + ',' + ((c[2] * 0.75) | 0) + ',0.22)'); gr.addColorStop(1, 'rgba(255,120,40,0)');
-      g.fillStyle = gr; g.beginPath(); g.arc(x, y, R, 0, 6.283); g.fill(); g.restore();
-      // reticle: the dashed ring is the hot core (melts fastest); the dot is the exact centre
-      g.strokeStyle = 'rgba(255,215,150,0.55)'; g.setLineDash([4, 5]); g.lineDashOffset = -t * 20; g.lineWidth = 1.2;
-      g.beginPath(); g.arc(x, y, cs * 4, 0, 6.283); g.stroke(); g.setLineDash([]);
-      if (lamp.absorbed) { g.strokeStyle = 'rgba(150,200,255,0.9)'; g.lineWidth = 2; g.beginPath(); g.arc(x, y, cs * 4.4, 0, 6.283); g.stroke(); }
+  /* Glim, the firefly. lamp.px/py is the exact heat point (what the sim uses) and the lantern is drawn centred on it.
+   * Glim hovers just above the lantern and carries it by two thin legs. On touch, the player's thumb is lamp.hx/hy,
+   * well below the lamp (R.lampOffset), marked only by a small glowing ring and a faint dotted guide. All the life
+   * (wing flutter, bob, lean, glow pulse) is visual: the lantern, the reticle and the heat never move because of it.
+   * When nobody is touching, Glim rests where the lamp last was, bobbing, with the lantern dimmed. */
+  var TOP_OFF = { lamp_candle: 0.6, lamp_firefly: 0.6, lamp_sun: 0.6, lamp_aurora: 0.6 };
+  P.restSpot = function () {
+    var b = this.board, cs = b.cs; return { x: this.w / 2, y: Math.max(this.top + 40, b.y + (this.crop + 5) * cs) };
+  };
+  P.drawFirefly = function (g, x, y, s, t, fast, on, lean) {
+    var fl = Math.sin(t * (fast ? 46 : 30)), glow = 0.75 + 0.25 * Math.sin(t * 4.2);
+    g.save(); g.translate(x, y); g.rotate(lean || 0);
+    // soft glow from the abdomen
+    g.save(); g.globalCompositeOperation = 'lighter';
+    var gg = g.createRadialGradient(0, s * 0.35, 0, 0, s * 0.35, s * 1.7); gg.addColorStop(0, 'rgba(255,225,120,' + (0.5 * glow) + ')'); gg.addColorStop(1, 'rgba(255,200,80,0)');
+    g.fillStyle = gg; g.beginPath(); g.arc(0, s * 0.35, s * 1.7, 0, 6.283); g.fill(); g.restore();
+    // wings (translucent, flapping)
+    g.fillStyle = 'rgba(255,248,215,0.55)'; g.strokeStyle = 'rgba(255,226,150,0.85)'; g.lineWidth = Math.max(1, s * 0.07);
+    for (var sd = -1; sd <= 1; sd += 2) {
+      g.save(); g.translate(sd * s * 0.22, -s * 0.05); g.rotate(sd * (0.55 + fl * 0.5));
+      g.beginPath(); g.ellipse(sd * s * 0.42, -s * 0.28, s * 0.5, s * 0.24, sd * -0.35, 0, 6.283); g.fill(); g.stroke();
+      g.beginPath(); g.ellipse(sd * s * 0.3, s * 0.0, s * 0.3, s * 0.15, sd * 0.25, 0, 6.283); g.fill(); g.restore();
     }
-    var s = Math.max(10, cs * 1.6), hasHandle = lamp.hy != null && lamp.hy - y > 20;
-    var chainLen = s * 2.4, hookY = y - s * 0.95 - chainLen;
-    var side = (lamp.hx != null && lamp.hx > this.w - 70) ? -1 : 1, poleX = x + side * s * 2.1;
-    var hook = hasHandle ? { x: x, y: hookY } : { x: x, y: hookY };
-    // verlet chain from the hook (pinned) to the lantern ring (pinned)
-    var N = 7, ch = this.chain, d = Math.min(0.05, dt || 0.016);
-    if (!ch || ch.pts.length !== N || Math.hypot(ch.pts[0].x - hook.x, ch.pts[0].y - hook.y) > 200) { ch = this.chain = { pts: [] }; for (var i = 0; i < N; i++) ch.pts.push({ x: hook.x, y: hook.y + chainLen * i / (N - 1), ox: hook.x, oy: hook.y + chainLen * i / (N - 1) }); }
-    var seg = chainLen / (N - 1) * 1.04, pts = ch.pts;
-    for (var k = 1; k < N - 1; k++) { var p = pts[k], vx = (p.x - p.ox) * 0.96, vy = (p.y - p.oy) * 0.96; p.ox = p.x; p.oy = p.y; p.x += vx; p.y += vy + 900 * d * d; }
-    pts[0].x = hook.x; pts[0].y = hook.y; pts[N - 1].x = x; pts[N - 1].y = y - s * 0.95;
-    for (var it = 0; it < 6; it++) for (var k2 = 0; k2 < N - 1; k2++) {
-      var a = pts[k2], b = pts[k2 + 1], dx = b.x - a.x, dy = b.y - a.y, dd = Math.hypot(dx, dy) || 0.001, df = (dd - seg) / dd * 0.5;
-      if (k2 > 0) { a.x += dx * df; a.y += dy * df; } if (k2 + 1 < N - 1) { b.x -= dx * df; b.y -= dy * df; }
+    // little legs
+    g.strokeStyle = '#8a6a3a'; g.lineWidth = Math.max(1.2, s * 0.1); g.lineCap = 'round';
+    g.beginPath(); g.moveTo(-s * 0.16, s * 0.65); g.lineTo(-s * 0.13, s * 0.88); g.moveTo(s * 0.16, s * 0.65); g.lineTo(s * 0.13, s * 0.88); g.stroke();
+    // glowing abdomen
+    var ag = g.createRadialGradient(0, s * 0.35, s * 0.05, 0, s * 0.35, s * 0.5); ag.addColorStop(0, '#fffbd0'); ag.addColorStop(0.55, '#ffd84a'); ag.addColorStop(1, '#f5a623');
+    g.fillStyle = ag; g.beginPath(); g.ellipse(0, s * 0.34, s * 0.36, s * 0.46, 0, 0, 6.283); g.fill();
+    g.fillStyle = 'rgba(255,255,255,' + (0.45 * glow) + ')'; g.beginPath(); g.ellipse(-s * 0.1, s * 0.22, s * 0.09, s * 0.16, 0.3, 0, 6.283); g.fill();
+    // ears (bunny-moth antennae)
+    for (var e = -1; e <= 1; e += 2) {
+      g.save(); g.translate(e * s * 0.2, -s * 0.52); g.rotate(e * (0.28 + Math.sin(t * 2 + e) * 0.05));
+      g.fillStyle = '#fff1cf'; g.beginPath(); g.ellipse(0, -s * 0.3, s * 0.11, s * 0.34, 0, 0, 6.283); g.fill();
+      g.fillStyle = 'rgba(255,170,150,0.7)'; g.beginPath(); g.ellipse(0, -s * 0.27, s * 0.05, s * 0.2, 0, 0, 6.283); g.fill(); g.restore();
     }
-    var tilt = Math.max(-0.35, Math.min(0.35, (pts[N - 1].x - pts[N - 2].x) / seg * -0.6));
-    // pole + handle (touch) or a little ring to hang from (mouse)
-    if (hasHandle) {
-      var hx = lamp.hx, hy = lamp.hy;
-      g.lineCap = 'round'; g.lineJoin = 'round';
-      g.strokeStyle = 'rgba(30,20,15,0.55)'; g.lineWidth = Math.max(3.5, s * 0.34);
-      g.beginPath(); g.moveTo(hx, hy - s * 0.6); g.quadraticCurveTo(poleX, hy - s * 1.2, poleX, y + s * 0.6); g.lineTo(poleX, hookY + s * 0.7); g.quadraticCurveTo(poleX, hookY - s * 0.2, x, hookY); g.stroke();
-      g.strokeStyle = '#8a5a35'; g.lineWidth = Math.max(2.5, s * 0.24); g.stroke();
-      g.strokeStyle = 'rgba(255,220,180,0.45)'; g.lineWidth = 1; g.stroke();
-      // handle grip under the thumb
-      g.fillStyle = '#5a3a22'; g.beginPath(); var gw = s * 0.7, gh = s * 1.5; g.moveTo(hx - gw, hy - gh * 0.5); g.lineTo(hx + gw, hy - gh * 0.5); g.lineTo(hx + gw * 0.8, hy + gh * 0.5); g.lineTo(hx - gw * 0.8, hy + gh * 0.5); g.closePath(); g.fill();
-      g.strokeStyle = '#c98b3a'; g.lineWidth = 2; g.beginPath(); g.moveTo(hx - gw, hy - gh * 0.2); g.lineTo(hx + gw, hy - gh * 0.2); g.moveTo(hx - gw * 0.9, hy + gh * 0.15); g.lineTo(hx + gw * 0.9, hy + gh * 0.15); g.stroke();
-    } else {
-      g.strokeStyle = '#c98b3a'; g.lineWidth = 2; g.beginPath(); g.arc(hook.x, hook.y - 4, 4, 0, 6.283); g.stroke();
-    }
-    // chain links
-    g.strokeStyle = '#d9b26a'; g.lineWidth = Math.max(1.4, s * 0.1);
-    for (var k3 = 0; k3 < N - 1; k3++) { var a2 = pts[k3], b2 = pts[k3 + 1], mx = (a2.x + b2.x) / 2, my = (a2.y + b2.y) / 2, an = Math.atan2(b2.y - a2.y, b2.x - a2.x); g.save(); g.translate(mx, my); g.rotate(an); g.beginPath(); g.ellipse(0, 0, seg * 0.55, seg * (k3 % 2 ? 0.12 : 0.26), 0, 0, 6.283); g.stroke(); g.restore(); }
-    // the lantern itself hangs at the heat point (glass is see-through so you can watch the ice)
-    g.save(); g.translate(x, y); g.rotate(tilt); g.translate(-x, -y);
-    this.drawLantern(g, x, y, s, lamp.on, skin, t);
+    // head
+    g.fillStyle = '#fff4dc'; g.beginPath(); g.arc(0, -s * 0.2, s * 0.44, 0, 6.283); g.fill();
+    g.strokeStyle = 'rgba(190,150,90,0.55)'; g.lineWidth = 1; g.stroke();
+    g.fillStyle = 'rgba(255,150,130,0.45)'; g.beginPath(); g.arc(-s * 0.27, -s * 0.08, s * 0.08, 0, 6.283); g.arc(s * 0.27, -s * 0.08, s * 0.08, 0, 6.283); g.fill();
+    var blink = (t % 3.4) > 3.28 ? 0.15 : 1;
+    g.fillStyle = '#2a1d16'; g.beginPath(); g.ellipse(-s * 0.16, -s * 0.2, s * 0.07, s * 0.1 * blink, 0, 0, 6.283); g.ellipse(s * 0.16, -s * 0.2, s * 0.07, s * 0.1 * blink, 0, 0, 6.283); g.fill();
+    if (blink > 0.5) { g.fillStyle = '#fff'; g.beginPath(); g.arc(-s * 0.14, -s * 0.24, s * 0.025, 0, 6.283); g.arc(s * 0.18, -s * 0.24, s * 0.025, 0, 6.283); g.fill(); }
+    g.strokeStyle = '#7a4a30'; g.lineWidth = Math.max(1, s * 0.05); g.beginPath(); g.arc(0, -s * 0.1, s * 0.07, 0.15, Math.PI - 0.15); g.stroke();
     g.restore();
+  };
+  P.drawLamp = function (g, lamp, dt, idle) {
+    if (!lamp && !idle) return;
+    if (!this.board) return;
+    var cs = this.board.cs, t = this.time, skin = (this.cos && this.cos.lamp) || 'lamp_brass', L = LAMPS[skin] || LAMPS.lamp_brass, c = L.glow;
+    var fy = this.fly; if (!fy) fy = this.fly = { x: 0, y: 0, px: null, py: null, vx: 0, rest: null };
+    var on = !!(lamp && lamp.on), x, y;
+    if (lamp) { x = lamp.px; y = lamp.py; fy.rest = { x: x, y: y }; }
+    else { if (!fy.rest) fy.rest = this.restSpot(); x = fy.rest.x; y = fy.rest.y; }
+    var alpha = lamp ? (on ? 1 : Math.max(0, lamp.fade == null ? 1 : lamp.fade)) : 1;
+    var s = Math.max(10, cs * 1.6), d = Math.min(0.05, dt || 0.016);
+    // horizontal speed (smoothed) only drives a little visual lean
+    if (fy.px != null && d > 0) fy.vx += ((x - fy.px) / d - fy.vx) * Math.min(1, d * 12); fy.px = x; fy.py = y;
+    var lean = Math.max(-0.22, Math.min(0.22, fy.vx * 0.0007)), idleBob = lamp && on ? 0.05 : 0.16, bob = Math.sin(t * 3.1) * s * idleBob, sway = Math.sin(t * 1.7) * s * (on ? 0.02 : 0.07);
+    var topOff = TOP_OFF[skin] || 1.14;
+    if (on || (lamp && lamp.fade > 0)) {
+      g.save(); g.globalAlpha = alpha;
+      if (on) {
+        var R = cs * 6.5 * (1 + Math.sin(t * 20) * 0.03);
+        g.save(); g.globalCompositeOperation = 'lighter';
+        var gr = g.createRadialGradient(x, y, 0, x, y, R);
+        gr.addColorStop(0, 'rgba(' + c[0] + ',' + c[1] + ',' + c[2] + ',0.55)'); gr.addColorStop(0.45, 'rgba(' + c[0] + ',' + ((c[1] * 0.85) | 0) + ',' + ((c[2] * 0.75) | 0) + ',0.22)'); gr.addColorStop(1, 'rgba(255,120,40,0)');
+        g.fillStyle = gr; g.beginPath(); g.arc(x, y, R, 0, 6.283); g.fill(); g.restore();
+        // reticle: the dashed ring is the hot core (melts fastest); it is centred exactly on the lantern
+        g.strokeStyle = 'rgba(255,215,150,0.55)'; g.setLineDash([4, 5]); g.lineDashOffset = -t * 20; g.lineWidth = 1.2;
+        g.beginPath(); g.arc(x, y, cs * 4, 0, 6.283); g.stroke(); g.setLineDash([]);
+        if (lamp.absorbed) { g.strokeStyle = 'rgba(150,200,255,0.9)'; g.lineWidth = 2; g.beginPath(); g.arc(x, y, cs * 4.4, 0, 6.283); g.stroke(); }
+      }
+      // touch point: a small glowing ring under the thumb + a faint dotted guide up to the lantern (touch only)
+      if (lamp && lamp.hx != null && lamp.hy != null && lamp.hy - y > 20) {
+        var hx = lamp.hx, hy = lamp.hy, pr = s * (0.95 + 0.06 * Math.sin(t * 5));
+        g.strokeStyle = 'rgba(255,225,160,0.32)'; g.lineWidth = 1.4; g.setLineDash([2, 6]); g.lineDashOffset = -t * 14;
+        g.beginPath(); g.moveTo(hx, hy - pr); g.lineTo(x, y + s * 0.75); g.stroke(); g.setLineDash([]);
+        g.fillStyle = 'rgba(255,220,150,0.14)'; g.beginPath(); g.arc(hx, hy, pr, 0, 6.283); g.fill();
+        g.strokeStyle = 'rgba(255,236,190,0.75)'; g.lineWidth = 2; g.beginPath(); g.arc(hx, hy, pr, 0, 6.283); g.stroke();
+        g.strokeStyle = 'rgba(255,236,190,0.28)'; g.lineWidth = 1.2; g.beginPath(); g.arc(hx, hy, pr * 1.35 + Math.sin(t * 5) * 1.5, 0, 6.283); g.stroke();
+      }
+      g.restore();
+    }
+    g.save(); g.globalAlpha = lamp ? Math.max(0.55, alpha) : 0.92;
+    // the lantern: centred on the heat point, hangs by a little loop from Glim's legs
+    var fs = s * 1.3, topY = y - topOff * s - s * 0.05, bodyY = topY - s * 0.55 - fs * 0.88 + bob, bodyX = x + sway + Math.max(-s * 0.35, Math.min(s * 0.35, -fy.vx * 0.012));
+    g.strokeStyle = '#d9b26a'; g.lineWidth = Math.max(1.2, s * 0.08); g.lineCap = 'round';
+    g.beginPath(); g.moveTo(bodyX - fs * 0.13, bodyY + fs * 0.88); g.lineTo(x, topY); g.moveTo(bodyX + fs * 0.13, bodyY + fs * 0.88); g.lineTo(x, topY); g.stroke();
+    g.save(); g.translate(x, y); g.rotate(on ? lean * 0.5 : 0); g.translate(-x, -y);
+    this.drawLantern(g, x, y, s, on, skin, t);
+    g.restore();
+    this.drawFirefly(g, bodyX, bodyY, fs, t, on, on, lean * 0.6);
     g.restore();
   };
   P.drawLantern = function (g, x, y, s, on, skin, t) {
@@ -3498,12 +3537,13 @@ if (typeof module === 'object' && module.exports) module.exports = LEVELS; else 
     g.save(); g.translate(sx, sy); this.updateParts(g, dt); g.restore();
     if (view.tutorial) {
       var tp = this.toPx(view.tutorial.x, view.tutorial.y), ph = (this.time % 1.4) / 1.4;
+      tp.y = Math.min(this.h - 30, tp.y + this.lampOffset); // where the THUMB goes; Glim then flies the lamp onto the ice
       g.strokeStyle = 'rgba(255,220,150,' + (1 - ph) + ')'; g.lineWidth = 3; g.beginPath(); g.arc(tp.x, tp.y, 10 + ph * 30, 0, 6.283); g.stroke();
       g.fillStyle = 'rgba(255,236,190,0.9)'; g.beginPath(); g.arc(tp.x, tp.y, 9, 0, 6.283); g.fill();
-      g.fillStyle = '#fff'; g.font = '800 14px ui-rounded,system-ui,sans-serif'; g.textAlign = 'center'; g.fillText('touch & hold', tp.x, tp.y - 46);
+      g.fillStyle = '#fff'; g.font = '800 14px ui-rounded,system-ui,sans-serif'; g.textAlign = 'center'; g.fillText('hold here', tp.x, tp.y + 52);
     }
     if (view.hints) this.drawHints(g, view.hints);
-    this.drawLamp(g, view.lamp, dt);
+    this.drawLamp(g, view.lamp, dt, !!view.idleFly);
     if (view.rewinding) {
       g.fillStyle = 'rgba(120,190,255,0.12)'; g.fillRect(0, 0, this.w, this.h);
       g.fillStyle = 'rgba(255,255,255,0.06)'; for (var y = (this.time * 300) % 6; y < this.h; y += 6) g.fillRect(0, y, this.w, 1);
@@ -4344,14 +4384,24 @@ if (typeof module === 'object' && module.exports) module.exports = LEVELS; else 
 
   // ---------------- input ----------------
   function pointerPos(e) { var r = canvas.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; }
-  /* Chain lamp: on touch you hold the HANDLE and the lamp hangs well above your thumb (R.lampOffset, sized per
-   * level so the lowest ice is always reachable); the heat goes exactly where the lamp is. With a mouse the lamp
-   * sits right at the cursor. */
+  /* Firefly lamp (Glim): on touch, Glim carries the lantern R.lampOffset px above your thumb (sized per level so
+   * the lowest ice is always reachable). The lantern follows the target with a light exponential smoothing
+   * (LAMP_TAU, no overshoot); the sim is fed the lantern's drawn position every frame, so heat lands exactly where
+   * the lamp is drawn. With a mouse the lamp sits right at the cursor, unsmoothed. */
+  var LAMP_TAU = 0.028;
   function setLampFromPointer(e) {
-    var p = pointerPos(e), mouse = e.pointerType === 'mouse', off = mouse ? 0 : R.lampOffset;
-    var ab = S.lamp && S.lamp.absorbed;
-    S.lamp = { px: p.x, py: Math.max(8, p.y - off), hx: mouse ? null : p.x, hy: mouse ? null : p.y, on: true, absorbed: ab }; // never let the lamp leave the top of the screen
-    var c = R.toSim(S.lamp.px, S.lamp.py); S.input.x = c.x; S.input.y = c.y;
+    var p = pointerPos(e), mouse = e.pointerType === 'mouse', off = mouse ? 0 : R.lampOffset, old = S.lamp;
+    var ty = Math.max(8, p.y - off); // never let the lamp leave the top of the screen
+    var keep = old && old.on && !mouse && old.tx != null;
+    S.lamp = { px: keep ? old.px : p.x, py: keep ? old.py : ty, tx: p.x, ty: ty, hx: mouse ? null : p.x, hy: mouse ? null : p.y, on: true, absorbed: old && old.absorbed };
+    advanceLamp(0);
+  }
+  /* once per frame, before the sim steps: move the lantern toward the target and hand that exact spot to the sim */
+  function advanceLamp(dt) {
+    var L = S.lamp; if (!L || !L.on) return;
+    if (L.hx == null || dt <= 0) { if (L.hx == null) { L.px = L.tx; L.py = L.ty; } }
+    else { var k = 1 - Math.exp(-dt / LAMP_TAU); L.px += (L.tx - L.px) * k; L.py += (L.ty - L.py) * k; if (Math.abs(L.tx - L.px) < 0.05) L.px = L.tx; if (Math.abs(L.ty - L.py) < 0.05) L.py = L.ty; }
+    var c = R.toSim(L.px, L.py); S.input.x = c.x; S.input.y = c.y;
   }
   function releaseInput() { S.pointer = null; S.input.on = false; if (S.lamp) S.lamp.on = false; A.hum(false); A.sizzle(0); if (map.drag) map.drag = null; rwEnd(); }
   /* Any tap anywhere (even on an overlay such as the fading title screen) skips a running screen transition or
@@ -4548,6 +4598,12 @@ if (typeof module === 'object' && module.exports) module.exports = LEVELS; else 
   $('shopFoot').insertAdjacentHTML('beforebegin', '<div class="m-buttons" id="shopAction" style="margin-top:10px"></div>');
   Array.prototype.forEach.call($('shopTabs').children, function (b) { b.onclick = function () { A.click(); S.shopTab = b.dataset.k; S.shopSel = null; buildShop(); }; });
   function visibleItems(kind) { return META.SHOP.filter(function (it) { return it.kind === kind && (!it.premium || MON.iap || save.owned.indexOf(it.id) >= 0); }); }
+  /* Glim carrying a lantern skin (shop icons + preview): same art as in the level */
+  function glimCarry(g, lx, ly, sz, skin, t) {
+    var up = ({ lamp_candle: 0.6, lamp_firefly: 0.6, lamp_sun: 0.6, lamp_aurora: 0.6 })[skin] || 1.14, topY = ly - up * sz - sz * 0.05, by = topY - sz * 1.45 + Math.sin(t * 3.1) * sz * 0.14;
+    g.save(); g.strokeStyle = '#d9b26a'; g.lineWidth = 1.3; g.lineCap = 'round'; g.beginPath(); g.moveTo(lx - sz * 0.13, by + sz * 0.92); g.lineTo(lx, topY); g.moveTo(lx + sz * 0.13, by + sz * 0.92); g.lineTo(lx, topY); g.stroke(); g.restore();
+    R.drawLantern(g, lx, ly, sz, true, skin, t); R.drawFirefly(g, lx, by, sz * 1.05, t, true, true, 0);
+  }
   function itemLocked(it) { return it.region && !META.regionUnlocked(save, META.regionIndex(it.region)) && save.owned.indexOf(it.id) < 0; }
   function buildShop() {
     $('shopFlakes').textContent = save.flakes;
@@ -4564,7 +4620,7 @@ if (typeof module === 'object' && module.exports) module.exports = LEVELS; else 
       el.onclick = function () { A.click(); S.shopSel = it.id; buildShop(); };
       box.appendChild(el);
       var cv = el.firstChild, g = cv.getContext('2d'), cos = { hat: save.equip.hat, scarf: save.equip.scarf, lamp: save.equip.lamp }; cos[it.kind] = it.id;
-      if (it.kind === 'lamp') R.drawLampBody(g, 56, 64, 22, true, it.id, 0.5); else R.drawPuckBody(g, 56, 74, 40, { mode: 'wait', dir: 1, t: 0.3, cos: cos });
+      if (it.kind === 'lamp') glimCarry(g, 56, 62, 13, it.id, 0.5); else R.drawPuckBody(g, 56, 74, 40, { mode: 'wait', dir: 1, t: 0.3, cos: cos });
     });
     var act = $('shopAction'); act.innerHTML = '';
     var sel = S.shopSel && META.item(S.shopSel);
@@ -4583,7 +4639,7 @@ if (typeof module === 'object' && module.exports) module.exports = LEVELS; else 
     var cos = { hat: save.equip.hat, scarf: save.equip.scarf, lamp: save.equip.lamp }, sel = S.shopSel && META.item(S.shopSel); if (sel) cos[sel.kind] = sel.id;
     g.fillStyle = 'rgba(240,248,255,0.9)'; g.beginPath(); g.ellipse(W / 2, H - 20, W * 0.42, 14, 0, 0, 6.283); g.fill();
     R.drawPuckBody(g, W / 2 - 24, H - 24, 66, { mode: Math.sin(R.time * 1.3) > 0.8 ? 'cheer' : 'wait', dir: 1, cos: cos });
-    R.drawLampBody(g, W / 2 + 70, H - 62 + Math.sin(R.time * 2) * 4, 20, true, cos.lamp, R.time);
+    glimCarry(g, W / 2 + 72, H - 52, 17, cos.lamp, R.time);
   }
 
   // ---------------- goals ----------------
@@ -4670,6 +4726,7 @@ if (typeof module === 'object' && module.exports) module.exports = LEVELS; else 
       if (S.paused) { /* hidden tab */ }
       else if (S.rewinding) { if (S.snaps.length > 1) { rewindBy(1); if (Math.random() < 0.5) A.rewind(); } }
       else if (!S.ended && !S.trans) {
+        advanceLamp(dt);
         S.acc += dt;
         while (S.acc >= STEP) {
           S.acc -= STEP;
@@ -4686,7 +4743,7 @@ if (typeof module === 'object' && module.exports) module.exports = LEVELS; else 
       }
       var lerp = null;
       if (sim.puck) { var a = S.acc / STEP, pp = S.prevPuck || sim.puck; lerp = { x: pp.x + (sim.puck.x - pp.x) * a, y: pp.y + (sim.puck.y - pp.y) * a }; }
-      R.frame(sim, { lamp: S.lamp, puck: lerp, rewinding: S.rewinding, hints: S.hints, tutorial: (S.tutorial && !S.touched && !S.hints) ? S.tutorial : null }, dt);
+      R.frame(sim, { lamp: S.lamp, puck: lerp, rewinding: S.rewinding, hints: S.hints, idleFly: true, tutorial: (S.tutorial && !S.touched && !S.hints) ? S.tutorial : null }, dt);
       if (S.lamp && !S.lamp.on) { S.lamp.fade = (S.lamp.fade || 1) - dt * 2; if (S.lamp.fade <= 0) S.lamp = null; }
       hud();
     } else if (S.screen === 'globe') {

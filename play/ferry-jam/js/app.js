@@ -1,4 +1,4 @@
-/* Ferry Jam UI — road routing, daily loop, shop stubs, audio. */
+/* Ferry Jam UI v4 — studio-style harbor, road routing, daily loop, shop stubs, juice. */
 (function () {
   'use strict';
   var KEY = 'ferryjam:v1';
@@ -12,14 +12,16 @@
   var save, screen = 'home', play = null, busy = false, toastTimer = 0;
   var moveQueue = [];
   var lastRewarded = 0;
+  var ROAD = 22;
 
   function utcToday() {
     try { return new Date().toISOString().slice(0, 10); } catch (e) { return '1970-01-01'; }
   }
+  function dayShift(iso, n) { return new Date(Date.parse(iso + 'T00:00:00Z') + n * 86400000).toISOString().slice(0, 10); }
   function defaultSave() {
     return {
       tickets: ECO.welcomeGift, welcomed: true, stars: {}, unlocked: 1, cleared: {},
-      noAds: false, starterBought: false, dockTokens: 0,
+      noAds: false, starterBought: false, dockTokens: 0, hintTokens: 3, bayTokens: 2,
       adsToday: { date: utcToday(), count: 0 },
       levelsSinceInterstitial: 0, seenHelp: false, seenTutorial: false,
       mutedSfx: false, mutedBgm: false,
@@ -43,6 +45,7 @@
       s.daily = Object.assign({ date: null, done: false, stars: 0, moves: 0, result: '' }, s.daily || {});
       s.login = Object.assign({ last: null, day: 0, claimed: false }, s.login || {});
       s.quests = Object.assign({ date: null, items: [] }, s.quests || {});
+      s.stats = Object.assign({ ferries: 0, combos: 0 }, s.stats || {});
       return s;
     } catch (e) { return defaultSave(); }
   }
@@ -52,8 +55,7 @@
   function isUnlocked(id) { return id <= (save.unlocked || 1); }
   function adsFree() {
     if (save.noAds) return true;
-    if (save.harborPass && save.harborPassUntil && save.harborPassUntil > Date.now()) return true;
-    return false;
+    return !!(save.harborPass && save.harborPassUntil && save.harborPassUntil > Date.now());
   }
 
   function toast(msg) {
@@ -62,9 +64,16 @@
     clearTimeout(toastTimer);
     toastTimer = setTimeout(function () { toastEl.classList.remove('show'); }, 1800);
   }
-
-  function ticketsChip() {
-    return '<div class="chip" data-go="shop">' + Art.ticketSVG() + '<b data-tickets="1">' + save.tickets + '</b></div>';
+  function coinChip(withPlus) {
+    return '<div class="coin-chip" data-go="shop">' + Art.ticketSVG() + '<b data-tickets="1">' + save.tickets + '</b>' +
+      (withPlus !== false ? '<span class="plus" aria-label="Get coins">' + Art.icon('plus', '#fff') + '</span>' : '') + '</div>';
+  }
+  function streakBadge() {
+    return '<div class="streak-badge" data-go="daily" title="Daily streak">' + Art.flameSVG() +
+      '<b>' + (save.streak.count || 0) + '</b><small>STREAK</small></div>';
+  }
+  function gearBtn() {
+    return '<button type="button" class="round-btn gear" data-act="settings" aria-label="Settings">' + Art.icon('gear') + '</button>';
   }
   function backBtn(to) {
     return '<button type="button" class="ico-btn" data-go="' + to + '" aria-label="Back">' + Art.icon('back') + '</button>';
@@ -75,26 +84,19 @@
     for (i = 1; i <= max; i++) s += Art.icon(i <= (n || 0) ? 'star' : 'starOff');
     return '<div class="stars">' + s + '</div>';
   }
-  function muteBtns() {
-    return '<div class="mute-row">' +
-      '<button type="button" class="ico-btn" data-act="mute-sfx" aria-label="Toggle sound">' + Art.muteIcon('sfx', save.mutedSfx) + '</button>' +
-      '<button type="button" class="ico-btn" data-act="mute-bgm" aria-label="Toggle music">' + Art.muteIcon('bgm', save.mutedBgm) + '</button>' +
-    '</div>';
-  }
   function showBanner(where) {
     var hide = adsFree() || where === 'daily';
     banner.hidden = hide;
     banner.textContent = hide ? '' : 'AD · 320×50 placeholder';
   }
   function closeModal() { modalRoot.className = ''; modalRoot.innerHTML = ''; }
-  function openModal(html, centered) {
+  function openModal(html, cls) {
     modalRoot.className = 'open';
-    modalRoot.innerHTML = '<div class="modal-back"><div class="modal' + (centered ? ' center' : '') + '">' + html + '</div></div>';
+    modalRoot.innerHTML = '<div class="modal-back"><div class="modal ' + (cls || '') + '">' + html + '</div></div>';
   }
   function sfx(name) { if (window.AudioFx) AudioFx.play(name); }
-  function applyMute() {
-    if (window.AudioFx) AudioFx.setMute(!!save.mutedSfx, !!save.mutedBgm);
-  }
+  function applyMute() { if (window.AudioFx) AudioFx.setMute(!!save.mutedSfx, !!save.mutedBgm); }
+  function pal(color) { return (typeof COLORS !== 'undefined' && COLORS[color]) || { fill: '#888', name: color }; }
 
   function ensureDailyMeta() {
     rollQuests();
@@ -125,21 +127,16 @@
     if (item.progress >= item.goal && !item.done) {
       item.done = true;
       save.tickets += item.reward;
-      toast('Quest complete! +' + item.reward);
+      toast('Quest complete! +' + item.reward + ' coins');
       sfx('coin');
     }
     persist();
   }
-  function pendingLogin() {
-    var d = utcToday();
-    return save.login.last !== d;
-  }
+  function pendingLogin() { return save.login.last !== utcToday(); }
   function loginDay() {
     var last = save.login.last, d = utcToday();
     if (!last) return 1;
-    var prev = new Date(last + 'T00:00:00Z').getTime() + 86400000;
-    var cur = new Date(d + 'T00:00:00Z').getTime();
-    if (prev === cur) return Math.min(7, (save.login.day || 0) + 1);
+    if (dayShift(last, 1) === d) return Math.min(7, (save.login.day || 0) + 1);
     return 1;
   }
   function claimLogin(mult) {
@@ -151,47 +148,37 @@
     persist();
     return amt;
   }
-
   function syncStreakOnOpen() {
-    var d = utcToday();
-    var st = save.streak;
+    var d = utcToday(), st = save.streak;
     if (!st.last || st.last === d) return;
-    var yesterday = new Date(new Date(d + 'T00:00:00Z').getTime() - 86400000).toISOString().slice(0, 10);
-    if (st.last === yesterday) return;
-    if (st.freeze > 0) {
-      st.freeze -= 1;
-      st.last = yesterday;
-      toast('Streak freeze used');
-    } else {
-      st.count = 0;
-    }
+    if (st.last === dayShift(d, -1)) return;
+    if (st.freeze > 0) { st.freeze -= 1; st.last = dayShift(d, -1); toast('Streak freeze used'); }
+    else st.count = 0;
     persist();
   }
-
   function markDailyWin(stars, moves) {
-    var d = utcToday();
-    var st = save.streak;
-    var yesterday = new Date(new Date(d + 'T00:00:00Z').getTime() - 86400000).toISOString().slice(0, 10);
-    if (st.last === d) {
-      /* already counted today */
-    } else if (st.last === yesterday || st.count === 0) {
-      st.count = (st.last === yesterday ? st.count : 0) + 1;
-    } else if (st.freeze > 0) {
-      st.freeze -= 1;
-      st.count += 1;
-    } else {
-      st.count = 1;
-    }
+    var d = utcToday(), st = save.streak, y = dayShift(d, -1);
+    if (st.last === d) { /* counted */ }
+    else if (st.last === y || st.count === 0) st.count = (st.last === y ? st.count : 0) + 1;
+    else if (st.freeze > 0) { st.freeze -= 1; st.count += 1; }
+    else st.count = 1;
     st.last = d;
     var boxes = '';
     for (var i = 0; i < 3; i++) boxes += i < stars ? '⭐' : '☆';
     save.daily = {
       date: d, done: true, stars: stars, moves: moves,
-      result: 'Ferry Jam Daily ' + d + '\n' + boxes + '\nStreak: ' + st.count + '\nhttps://jonidge.com/play/ferry-jam/'
+      result: 'Ferry Jam Daily ' + d + '\n' + boxes + '  ' + moves + ' moves\n🔥 Streak: ' + st.count + '\nhttps://jonidge.com/play/ferry-jam/'
     };
     persist();
   }
+  var dailyCache = null;
+  function todaysDaily() {
+    var d = utcToday();
+    if (!dailyCache || dailyCache.date !== d) dailyCache = { date: d, level: Engine.generateDaily(d, 2) };
+    return dailyCache.level;
+  }
 
+  /* ---------------- screens ---------------- */
   function render() {
     ensureDailyMeta();
     if (screen === 'home') renderHome();
@@ -201,158 +188,226 @@
     else if (screen === 'daily') renderDaily();
     else if (screen === 'rewards') renderRewards();
     else if (screen === 'play') renderPlay();
-    showBanner(play && play.mode === 'daily' ? 'daily' : screen);
+    showBanner(play && play.mode === 'daily' && screen === 'play' ? 'daily' : screen);
+  }
+  function sceneBits() {
+    return '<div class="sky-bits"><div class="sun"></div><div class="cloud c1"></div><div class="cloud c2"></div><div class="cloud c3"></div>' +
+      '<div class="island i1"></div><div class="island i2"></div></div>';
+  }
+  function topbar(title, back) {
+    return '<div class="topbar">' + backBtn(back || 'home') + '<h2>' + title + '</h2>' + coinChip(true) + '</div>';
   }
 
   function renderHome() {
-    ensureDailyMeta();
-    rollQuests();
     var questOpen = save.quests.items.some(function (q) { return !q.done; });
+    var next = nextPlayable();
+    var dailyDone = save.daily.done && save.daily.date === utcToday();
     view.innerHTML =
-      '<div class="home">' +
-        '<div class="home-sky"><div class="sun"></div><div class="cloud c1"></div><div class="cloud c2"></div></div>' +
+      '<div class="home">' + sceneBits() +
+        '<div class="home-hud">' + coinChip(true) + '<span class="grow"></span>' + streakBadge() + gearBtn() + '</div>' +
         '<div class="home-hero">' +
           '<div class="logo-wrap">' + Art.logoSVG() + '</div>' +
           '<h1 class="wordmark">Ferry <span>Jam</span></h1>' +
-          '<p>Match colors. Fill the ferry. Clear the lot.</p>' +
-          '<div class="chip-row">' + ticketsChip() +
-            '<div class="chip streak-chip">🔥 <b>' + (save.streak.count || 0) + '</b> streak</div>' +
-            muteBtns() +
-          '</div>' +
+          '<p class="tagline">Match colors · Fill the ferry · Clear the lot</p>' +
         '</div>' +
         '<div class="home-actions">' +
-          '<button type="button" class="btn lg block" data-act="play-next">' + Art.icon('play') + ' Play</button>' +
-          '<div class="home-daily">' +
-            '<button type="button" class="btn teal block" data-go="daily">Daily Puzzle</button>' +
-            '<button type="button" class="btn white block" data-go="rewards">Rewards' + (questOpen || pendingLogin() ? '<span class="quest-dot"></span>' : '') + '</button>' +
+          '<button type="button" class="btn mega block" data-act="play-next"><span class="mega-sub">Level ' + next + '</span>' + Art.icon('play', '#fff') + ' Play</button>' +
+          '<div class="home-row">' +
+            '<button type="button" class="tile daily-tile" data-go="daily">' +
+              '<span class="tile-ico">' + Art.flameSVG() + '</span><span class="tile-txt"><b>Daily Puzzle</b><small>' +
+              (dailyDone ? 'Done · ' + save.streak.count + ' day streak' : 'New harbor today!') + '</small></span>' +
+              (dailyDone ? '' : '<span class="new-tag">NEW</span>') + '</button>' +
+            '<button type="button" class="tile gift-tile" data-go="rewards">' +
+              '<span class="tile-ico">' + Art.icon('gift') + '</span><span class="tile-txt"><b>Rewards</b><small>' +
+              (pendingLogin() ? 'Gift ready' : 'Daily quests') + '</small></span>' +
+              (questOpen || pendingLogin() ? '<span class="dot"></span>' : '') + '</button>' +
           '</div>' +
-          '<button type="button" class="btn white block" data-go="levels">Levels</button>' +
-          '<button type="button" class="btn white block" data-go="shop">' + Art.icon('shop') + ' Shop</button>' +
-          '<button type="button" class="btn ghost block" data-go="help">' + Art.icon('help') + ' How to play</button>' +
+          '<div class="home-row">' +
+            '<button type="button" class="btn white block" data-go="levels">' + Art.icon('calendar') + ' Levels</button>' +
+            '<button type="button" class="btn white block" data-go="shop">' + Art.icon('shop') + ' Shop</button>' +
+          '</div>' +
+          '<button type="button" class="link-btn" data-go="help">' + Art.icon('help') + ' How to play</button>' +
         '</div>' +
-        '<div class="home-shore"></div>' +
+        '<div class="home-sea"><div class="sparkles"></div><div class="home-boat">' +
+          Art.ferrySVG({ color: 'blue', capacity: 2 }) + '</div>' +
+          '<div class="home-palm l">' + Art.palmSVG() + '</div><div class="home-palm r">' + Art.palmSVG(true) + '</div>' +
+        '</div>' +
       '</div>';
   }
 
   function renderLevels() {
-    var chapters = (typeof CHAPTERS !== 'undefined' && CHAPTERS) || [
-      { id: 1, name: 'Harbor', start: 1, end: LEVELS.length }
-    ];
+    var chapters = (typeof CHAPTERS !== 'undefined' && CHAPTERS) || [{ id: 1, name: 'Harbor', start: 1, end: LEVELS.length }];
     var html = '';
     chapters.forEach(function (ch) {
-      html += '<div class="chapter-head">' + ch.name + '</div>';
+      var got = 0, max = 0;
+      LEVELS.forEach(function (lv) { if (lv.id >= ch.start && lv.id <= ch.end) { max += 3; got += save.stars[lv.id] || 0; } });
+      html += '<div class="chapter-head"><span class="ch-no">Chapter ' + ch.id + '</span><b>' + ch.name + '</b><span class="ch-stars">' + Art.icon('star') + got + '/' + max + '</span></div>';
       LEVELS.filter(function (lv) { return lv.id >= ch.start && lv.id <= ch.end; }).forEach(function (lv) {
         var open = isUnlocked(lv.id);
-        html +=
-          '<button type="button" class="lvl' + (open ? '' : ' locked') + '" ' +
-            (open ? 'data-level="' + lv.id + '"' : 'disabled') + '>' +
-            (open ? '<div class="num">' + lv.id + '</div>' : '<div class="lock-ico">' + Art.icon('lock') + '</div>') +
-            '<div class="nm">' + (lv.name || ('Level ' + lv.id)) + '</div>' +
-            starStr(save.stars[lv.id] || 0) +
-          '</button>';
+        var isNext = open && !save.cleared[lv.id];
+        html += '<button type="button" class="lvl' + (open ? '' : ' locked') + (isNext ? ' next' : '') + '" ' +
+          (open ? 'data-level="' + lv.id + '"' : 'disabled') + '>' +
+          (open ? '<div class="num">' + lv.id + '</div>' : '<div class="lock-ico">' + Art.icon('lock') + '</div>') +
+          '<div class="nm">' + (lv.name || ('Level ' + lv.id)) + '</div>' + starStr(save.stars[lv.id] || 0) + '</button>';
       });
     });
-    view.innerHTML =
-      '<div class="screen">' +
-        '<div class="topbar">' + backBtn('home') + '<h2>Levels</h2>' + ticketsChip() + '</div>' +
-        '<div class="level-grid chapters">' + html + '</div>' +
-      '</div>';
+    view.innerHTML = '<div class="screen">' + sceneBits() + topbar('Levels') + '<div class="level-grid chapters">' + html + '</div></div>';
   }
 
   function renderHelp() {
+    var mini = function (c, dir) { return '<span class="help-art">' + Art.carSVG({ color: c, id: 'h' + c }, { dir: dir || 'N', kind: 'sedan' }) + '</span>'; };
     view.innerHTML =
-      '<div class="screen">' +
-        '<div class="topbar">' + backBtn('home') + '<h2>How to play</h2>' + ticketsChip() + '</div>' +
-        '<div class="help-card"><h3>1. Tap a clear car</h3><p>A car can leave only if the road ahead of it is empty, all the way to the exit.</p></div>' +
-        '<div class="help-card"><h3>2. Drive the ring road</h3><p>Cars never fall off the map. They drive out, follow the road, and roll down a ramp onto a ferry — or park in a waiting bay.</p></div>' +
-        '<div class="help-card"><h3>3. Match the boarding ferry</h3><p>Only the ferry in a berth can load. Same color boards. When it is full it sails, and the next ferry in the queue docks.</p></div>' +
-        '<div class="help-card"><h3>4. Waiting bays</h3><p>If the docked ferry is the wrong color, the car waits on the pier. If every bay is full and no ferry matches, you jam.</p></div>' +
-        '<div class="help-card"><h3>5. Special cars & ferries</h3><p>Keys unlock cars, gates block a lane until opened, some ferries take small cars only, and some will leave on a timer.</p></div>' +
-        '<button type="button" class="btn block" data-act="start-play">Got it</button>' +
+      '<div class="screen">' + sceneBits() + topbar('How to play') +
+        '<div class="help-list">' +
+        '<div class="help-card">' + mini('red') + '<div><h3>1. Tap a clear car</h3><p>A car can leave only if the road ahead is empty, all the way to the edge of the lot.</p></div></div>' +
+        '<div class="help-card">' + mini('blue', 'E') + '<div><h3>2. Drive the road</h3><p>Cars never fall off the map. They drive the ring road down to the pier, then take the ramp.</p></div></div>' +
+        '<div class="help-card"><span class="help-art wide">' + Art.ferrySVG({ color: 'yellow', capacity: 2 }) + '</span><div><h3>3. Match the boarding ferry</h3><p>Only a docked ferry loads, and only its own color. Full ferries sail and the NEXT ferry docks.</p></div></div>' +
+        '<div class="help-card">' + mini('green', 'E') + '<div><h3>4. Waiting bays</h3><p>Wrong color? The car parks in a numbered bay until its ferry docks. All bays full means a jam.</p></div></div>' +
+        '<div class="help-card"><span class="help-art">' + Art.gateSVG() + '</span><div><h3>5. Specials</h3><p>Keys unlock cars, gates block lanes, some ferries take small cars only, some leave on a timer.</p></div></div>' +
+        '</div>' +
+        '<button type="button" class="btn mega block" data-act="start-play">Got it</button>' +
       '</div>';
   }
 
+  function priceOf(p) { return Economy.formatPrice(p.priceUSD, currency); }
   function renderShop() {
-    var items = (ECO.products || []).map(function (p) {
-      var price = Economy.formatPrice(p.priceUSD, currency);
-      var extra = p.tickets ? (p.tickets + ' tickets') : (p.type === 'ads' ? 'Removes interstitial ads' : (p.type === 'pass' ? 'No ads + daily bonus for 30 days' : (p.tag || '')));
-      return '<div class="product">' +
-        '<div class="info"><h3>' + p.title + (p.tag ? ' <span class="tag">' + p.tag + '</span>' : '') + '</h3>' +
-        '<p>' + extra + '</p></div>' +
-        '<button type="button" class="btn sm" data-buy="' + p.id + '">' + price + '</button>' +
-      '</div>';
+    var P = function (id) { return Economy.product(id); };
+    var packs = ['tickets_100', 'tickets_550', 'tickets_1200', 'tickets_2500'].map(function (id, i) {
+      var p = P(id); if (!p) return '';
+      return '<div class="pack' + (p.tag === 'Best' ? ' best' : '') + '">' +
+        (p.tag ? '<span class="pack-tag">' + (p.tag === 'Best' ? 'Best value' : p.tag) + '</span>' : '') +
+        '<div class="pack-art">' + Art.coinStackSVG(i === 3 ? 5 : i + 1) + '</div>' +
+        '<div class="pack-amt">' + Art.ticketSVG() + p.tickets.toLocaleString('en-US') + '</div>' +
+        '<button type="button" class="btn green sm block" data-buy="' + p.id + '">' + priceOf(p) + '</button></div>';
     }).join('');
+    var ra = P('remove_ads'), hp = P('harbor_pass'), sp = P('starter_pack');
+    var taxi = P('skin_car_taxi'), stripe = P('skin_ferry_stripe');
     view.innerHTML =
-      '<div class="screen">' +
-        '<div class="topbar">' + backBtn('home') + '<h2>Shop</h2>' + ticketsChip() + '</div>' +
-        '<p class="blurb">Placeholder prices only — nothing is billed. Contact jonidge@yahoo.com.</p>' +
+      '<div class="screen">' + sceneBits() + topbar('Shop') +
         '<div class="shop-list">' +
-          '<div class="product"><div class="info"><h3>Watch a placeholder ad</h3><p>+' + ECO.adReward.tickets + ' tickets</p></div>' +
-            '<button type="button" class="btn sm teal" data-act="watch-ad">Watch</button></div>' +
-          items +
+          '<div class="offer starter"><span class="ribbon-tag">Starter Pack</span>' +
+            '<div class="offer-art">' + Art.coinStackSVG(3) + '</div>' +
+            '<div class="offer-txt"><b>' + sp.tickets + ' coins + 3 hints</b><small>Plus a short ad-free window. One time only.</small></div>' +
+            '<button type="button" class="btn sm" data-buy="starter_pack">' + priceOf(sp) + '</button></div>' +
+          '<div class="offer free"><div class="offer-art ad-art">' + Art.icon('ad', '#fff') + '</div>' +
+            '<div class="offer-txt"><b>Free coins</b><small>Watch a placeholder ad · +' + ECO.adReward.tickets + ' coins</small></div>' +
+            '<button type="button" class="btn teal sm" data-act="watch-ad">Watch</button></div>' +
+          '<div class="pack-grid">' + packs + '</div>' +
+          '<div class="offer pass"><div class="offer-art">' + Art.ferrySVG({ color: 'yellow', capacity: 2 }) + '</div>' +
+            '<div class="offer-txt"><b>Harbor Pass</b><small>No ads + ' + ((hp.extras && hp.extras.dailyBonus) || 20) + ' bonus coins a day for 30 days</small></div>' +
+            '<button type="button" class="btn sm" data-buy="harbor_pass">' + priceOf(hp) + '</button></div>' +
+          '<div class="offer noads"><div class="offer-art noads-art">AD<i></i></div>' +
+            '<div class="offer-txt"><b>Remove Ads</b><small>No interstitials or banner. Rewarded ads stay optional.</small></div>' +
+            '<button type="button" class="btn sm" data-buy="remove_ads">' + priceOf(ra) + '</button></div>' +
+          '<div class="section-head">Cosmetics</div>' +
+          '<div class="pack-grid two">' +
+            '<div class="pack skin"><div class="pack-art">' + Art.carSVG({ color: 'yellow', id: 'taxi' }, { dir: 'E', kind: 'sedan' }) + '</div><div class="pack-amt">Taxi skin</div>' +
+              '<button type="button" class="btn green sm block" data-buy="skin_car_taxi">' + priceOf(taxi) + '</button></div>' +
+            '<div class="pack skin"><div class="pack-art">' + Art.ferrySVG({ color: 'green', capacity: 2 }, { stripe: true }) + '</div><div class="pack-amt">Stripe livery</div>' +
+              '<button type="button" class="btn green sm block" data-buy="skin_ferry_stripe">' + priceOf(stripe) + '</button></div>' +
+          '</div>' +
+          '<p class="fine">Placeholder prices only. Nothing is billed. Contact jonidge@yahoo.com.</p>' +
         '</div>' +
       '</div>';
+  }
+
+  function miniLot(lv) {
+    if (!lv) return '';
+    var cs = 12, W = lv.cols * cs + 8, H = lv.rows * cs + 8;
+    var s = '<svg class="mini-lot" viewBox="-4 -4 ' + W + ' ' + H + '"><rect x="-4" y="-4" width="' + W + '" height="' + H + '" rx="6" fill="#4A505C"/>';
+    (lv.obstacles || []).forEach(function (o) { s += '<rect x="' + (o.c * cs + 2) + '" y="' + (o.r * cs + 2) + '" width="8" height="8" rx="2" fill="#C48A4A"/>'; });
+    lv.cars.forEach(function (car) {
+      var p = carPos(car);
+      s += '<rect x="' + (p.c0 * cs + 1.5) + '" y="' + (p.r0 * cs + 1.5) + '" width="' + ((p.c1 - p.c0 + 1) * cs - 3) + '" height="' + ((p.r1 - p.r0 + 1) * cs - 3) +
+        '" rx="3" fill="' + (Art.PALETTE[car.color] || {}).body + '" stroke="#0004"/>';
+    });
+    return s + '</svg>';
   }
 
   function renderDaily() {
-    ensureDailyMeta();
     var d = utcToday();
     var done = save.daily.done && save.daily.date === d;
+    var st = save.streak;
+    var lv = todaysDaily();
+    var week = '', names = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+    for (var i = -6; i <= 0; i++) {
+      var day = dayShift(d, i);
+      var played = st.last && st.count > 0 && day <= st.last && day > dayShift(st.last, -st.count);
+      week += '<div class="wk' + (played ? ' on' : '') + (i === 0 ? ' today' : '') + '"><span>' + names[new Date(day + 'T00:00:00Z').getUTCDay()] + '</span><i>' +
+        (played ? Art.icon('check', '#fff') : (i === 0 ? '?' : '')) + '</i></div>';
+    }
+    var now = new Date();
+    var left = Math.max(0, Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1) - now.getTime());
+    var hh = Math.floor(left / 3600000), mm = Math.floor(left % 3600000 / 60000);
+    var pretty = new Date(d + 'T12:00:00Z').toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric', timeZone: 'UTC' });
     view.innerHTML =
-      '<div class="screen">' +
-        '<div class="topbar">' + backBtn('home') + '<h2>Daily Puzzle</h2>' + ticketsChip() + '</div>' +
+      '<div class="screen daily">' + sceneBits() + topbar('Daily Puzzle') +
         '<div class="daily-hero">' +
-          '<h3>' + d + '</h3>' +
-          '<div class="streak-big">' + (save.streak.count || 0) + '</div>' +
-          '<p>day streak' + (save.streak.freeze ? ' · ' + save.streak.freeze + ' freeze' : '') + '</p>' +
-          (done
-            ? starStr(save.daily.stars) + '<p>Cleared in ' + save.daily.moves + ' moves.</p>'
-            : '<p>Same puzzle for everyone today. Come back each day to keep your streak.</p>') +
+          '<div class="ribbon-title">Daily Harbor</div>' +
+          '<div class="daily-date">' + pretty + '</div>' +
+          '<div class="streak-row"><div class="big-flame">' + Art.flameSVG() + '<b>' + (st.count || 0) + '</b></div>' +
+            '<div class="streak-txt"><b>' + (st.count || 0) + ' day streak</b><small>' + (st.freeze ? st.freeze + ' streak freeze ready' : 'No freeze yet. Grab one below.') + '</small></div></div>' +
+          '<div class="week">' + week + '</div>' +
+        '</div>' +
+        '<div class="daily-card">' +
+          '<div class="preview">' + miniLot(lv) + '</div>' +
+          '<div class="facts">' +
+            '<div><b>' + (lv ? lv.cars.length : '?') + '</b><small>cars</small></div>' +
+            '<div><b>' + (lv ? lv.ferries.length : '?') + '</b><small>ferries</small></div>' +
+            '<div><b>' + (lv ? lv.parMoves : '?') + '</b><small>par moves</small></div>' +
+          '</div>' +
+          '<div class="rewards-row"><span>' + Art.ticketSVG() + '+' + (ECO.dailyPuzzleReward || 25) + '</span><span>' + Art.icon('star') + '+' + (ECO.dailyPuzzlePerfect || 15) + ' perfect</span></div>' +
         '</div>' +
         (done
-          ? '<button type="button" class="btn block" data-act="daily-play">Play again</button>' +
-            '<button type="button" class="btn white block" data-act="daily-share">Share result</button>'
-          : '<button type="button" class="btn lg block" data-act="daily-play">Play today\'s harbor</button>') +
-        '<button type="button" class="btn ghost block" data-act="buy-freeze">Streak freeze · ' + ECO.streakFreezeCost + ' tickets</button>' +
-        '<p class="blurb">Miss a day? A freeze keeps your streak. You can also watch a placeholder ad on the lose screen.</p>' +
+          ? '<div class="done-row">' + starStr(save.daily.stars) + '<span>Cleared in ' + save.daily.moves + ' moves</span></div>' +
+            '<div class="home-row"><button type="button" class="btn teal block" data-act="daily-share">' + Art.icon('share', '#fff') + ' Share</button>' +
+            '<button type="button" class="btn white block" data-act="daily-play">Replay</button></div>'
+          : '<button type="button" class="btn mega block" data-act="daily-play">' + Art.icon('play', '#fff') + ' Play today\'s harbor</button>') +
+        '<div class="daily-foot">' +
+          '<button type="button" class="btn ghost sm" data-act="buy-freeze">' + Art.icon('snow') + ' Freeze · ' + ECO.streakFreezeCost + '</button>' +
+          '<span class="countdown">Next harbor in ' + hh + 'h ' + mm + 'm</span>' +
+        '</div>' +
+        '<p class="fine">Same puzzle for everyone. Miss a day and a freeze keeps the streak.</p>' +
       '</div>';
   }
 
   function renderRewards() {
     rollQuests();
+    var claimedUpTo = pendingLogin() ? loginDay() - 1 : save.login.day;
     var cal = ECO.loginCalendar.map(function (n, i) {
-      var day = i + 1;
-      var cls = 'cal-day';
-      if (save.login.day >= day && save.login.last === utcToday() || (save.login.day >= day && !pendingLogin())) cls += ' claimed';
+      var day = i + 1, cls = 'cal-day';
+      if (day <= claimedUpTo) cls += ' claimed';
       if (pendingLogin() && loginDay() === day) cls += ' today';
-      if (pendingLogin() && day > loginDay()) cls += ' locked';
-      return '<div class="' + cls + '"><div class="d">Day ' + day + '</div><div class="n">+' + n + '</div></div>';
+      if (day === 7) cls += ' big';
+      return '<div class="' + cls + '"><div class="d">Day ' + day + '</div><div class="ci">' + (day === 7 ? Art.icon('gift') : Art.ticketSVG()) + '</div><div class="n">+' + n + '</div>' +
+        (day <= claimedUpTo ? '<span class="tick">' + Art.icon('check', '#fff') + '</span>' : '') + '</div>';
     }).join('');
     var quests = save.quests.items.map(function (q) {
       var pct = Math.min(100, Math.round((q.progress || 0) / q.goal * 100));
-      return '<div class="quest' + (q.done ? ' done' : '') + '"><div class="info"><b>' + q.label + '</b><div class="bar"><i style="width:' + pct + '%"></i></div></div><div>+' + q.reward + '</div></div>';
+      return '<div class="quest' + (q.done ? ' done' : '') + '"><div class="info"><b>' + q.label + '</b><div class="bar"><i style="width:' + pct + '%"></i></div><small>' + (q.progress || 0) + '/' + q.goal + '</small></div>' +
+        '<div class="q-rew">' + (q.done ? Art.icon('check', '#17A85C') : Art.ticketSVG() + '+' + q.reward) + '</div></div>';
     }).join('');
     view.innerHTML =
-      '<div class="screen">' +
-        '<div class="topbar">' + backBtn('home') + '<h2>Rewards</h2>' + ticketsChip() + '</div>' +
-        '<div class="help-card"><h3>Daily login</h3><p>Claim once a day. Day 7 is the big gift.</p></div>' +
-        '<div class="calendar">' + cal + '</div>' +
+      '<div class="screen">' + sceneBits() + topbar('Rewards') +
+        '<div class="panel"><div class="ribbon-title">Daily gift</div><div class="calendar">' + cal + '</div>' +
         (pendingLogin()
-          ? '<button type="button" class="btn block" data-act="claim-login">Claim today</button>' +
-            '<button type="button" class="btn teal block" data-act="claim-login-x2">Watch ad · claim ×2</button>'
-          : '<p class="blurb">Already claimed today. See you tomorrow.</p>') +
-        '<div class="help-card"><h3>Daily quests</h3><p>Reset at midnight UTC, same window as the daily puzzle.</p></div>' +
-        quests +
+          ? '<div class="home-row"><button type="button" class="btn green block" data-act="claim-login">Claim</button>' +
+            '<button type="button" class="btn teal block" data-act="claim-login-x2">' + Art.icon('ad', '#fff') + ' Claim ×2</button></div>'
+          : '<p class="fine dark">Claimed today. Come back tomorrow for day ' + Math.min(7, save.login.day + 1) + '.</p>') +
+        '</div>' +
+        '<div class="panel"><div class="ribbon-title">Daily quests</div>' + quests + '</div>' +
       '</div>';
   }
 
+  /* ---------------- play ---------------- */
   function startLevel(id, mode) {
-    var lv = mode === 'daily' ? Engine.generateDaily(utcToday(), 2) : levelById(id);
+    var lv = mode === 'daily' ? todaysDaily() : levelById(id);
     if (!lv) { toast('Could not load that harbor'); return; }
     if (mode !== 'daily' && !isUnlocked(id)) return;
     play = {
       level: lv, state: Engine.init(lv), history: [], mode: mode || 'campaign',
-      freeUndos: ECO.freeUndosPerLevel || 3, doubled: false, tutorialStep: 0
+      freeUndos: ECO.freeUndosPerLevel || 3, doubled: false, tutorialStep: 0,
+      shownDocked: {}, intro: true
     };
     moveQueue = [];
     busy = false;
@@ -360,7 +415,6 @@
     screen = 'play';
     render();
   }
-
   function nextPlayable() {
     for (var i = 0; i < LEVELS.length; i++) {
       if (isUnlocked(LEVELS[i].id) && !save.cleared[LEVELS[i].id]) return LEVELS[i].id;
@@ -368,144 +422,163 @@
     return Math.min(save.unlocked || 1, LEVELS[LEVELS.length - 1].id);
   }
 
-  function pal(color) { return (typeof COLORS !== 'undefined' && COLORS[color]) || { fill: '#888', name: color }; }
-
-  function carStyle(car) {
+  function carPos(car) {
     var cells = Engine.cellsOf(car);
-    var rs = cells.map(function (p) { return p.r; });
-    var cs = cells.map(function (p) { return p.c; });
-    var r0 = Math.min.apply(null, rs), r1 = Math.max.apply(null, rs);
-    var c0 = Math.min.apply(null, cs), c1 = Math.max.apply(null, cs);
-    var rot = { N: 0, E: 90, S: 180, W: 270 }[car.dir] || 0;
-    return 'grid-row:' + (r0 + 1) + ' / ' + (r1 + 2) + ';grid-column:' + (c0 + 1) + ' / ' + (c1 + 2) +
-      ';transform:rotate(' + rot + 'deg)';
+    var rs = cells.map(function (p) { return p.r; }), cs = cells.map(function (p) { return p.c; });
+    return { r0: Math.min.apply(null, rs), r1: Math.max.apply(null, rs), c0: Math.min.apply(null, cs), c1: Math.max.apply(null, cs) };
   }
-
-  function carHtml(car, extraClass) {
-    var kind = Art.kindOf(car);
+  function carHtml(car) {
+    var p = carPos(car);
     var badges = '';
     if (car.locked) badges += '<span class="badge">' + Art.lockBadge() + '</span>';
     if (car.isKey) badges += '<span class="badge">' + Art.keyBadge() + '</span>';
     var locked = play && Engine.isLocked(car, play.state);
-    return '<button type="button" class="car' + (extraClass ? ' ' + extraClass : '') + (locked ? ' locked' : '') +
-      '" data-car="' + car.id + '" style="' + carStyle(car) + '" aria-label="' + car.color + ' car">' +
-      Art.carSVG(car, { kind: kind, dir: 'N', idPrefix: 'lot' }) + badges + '</button>';
+    return '<button type="button" class="car' + (locked ? ' locked' : '') + '" data-car="' + car.id + '" style="grid-row:' + (p.r0 + 1) + ' / ' + (p.r1 + 2) +
+      ';grid-column:' + (p.c0 + 1) + ' / ' + (p.c1 + 2) + '" aria-label="' + car.color + ' car">' +
+      Art.carSVG(car, { dir: car.dir }) + badges + '</button>';
   }
-
-  function deckCarHtml(car) {
-    var kind = Art.kindOf(car);
-    return Art.carSVG(car, { kind: kind, dir: 'E', idPrefix: 'deck' });
-  }
+  function deckCarHtml(car, dir) { return Art.carSVG(car, { dir: dir || 'E' }); }
 
   function ferryHtml(f, cls) {
-    var slots = Art.ferrySlots ? Art.ferrySlots(f.capacity) : [];
+    var slots = Art.ferrySlots(f.capacity);
     var slotHtml = (f.cargo || []).map(function (c, i) {
-      var s = slots[i] || { x: 20 + i * 18, y: 40, w: 16, h: 28 };
-      return '<div class="fslot" style="left:' + s.x + '%;top:' + s.y + '%;width:' + s.w + '%;height:' + s.h + '%">' +
-        deckCarHtml(c) + '</div>';
+      var s = slots[i];
+      return '<div class="fslot" style="left:' + s.x + '%;top:' + s.y + '%;width:' + s.w + '%;height:' + s.h + '%">' + deckCarHtml(c, 'E') + '</div>';
     }).join('');
     var badges = '';
     if (f.maxLen) badges += '<span class="ferry-badge small-only">Cars only</span>';
     if (f.timeLimit) badges += '<span class="ferry-badge timer">⏱ ' + (f.timeLeft == null ? f.timeLimit : f.timeLeft) + '</span>';
-    return '<div class="ferry ' + (cls || '') + '" data-ferry="' + f.id + '">' +
-      badges +
-      '<div class="ferry-art">' + Art.ferrySVG(f, { uid: 'dock-' + (save.skins.ferry || 'default') }) + '</div>' +
-      '<div class="ferry-slots">' + slotHtml + '</div><div class="wake"></div></div>';
+    return '<div class="ferry ' + (cls || '') + '" data-ferry="' + f.id + '">' + badges +
+      '<div class="ferry-art">' + Art.ferrySVG(f, { stripe: save.skins.ferry === 'stripe' }) + '</div>' +
+      '<div class="ferry-slots">' + slotHtml + '</div></div>';
   }
-
-  function holdCap(state) { return Engine.holdCap(state); }
+  function powerBtn(act, cls, ico, label, count) {
+    return '<button type="button" class="power ' + cls + '" data-act="' + act + '"><span class="orb">' + ico + '</span>' +
+      '<span class="cnt' + (count > 0 ? '' : ' plus') + '">' + (count > 0 ? count : '+') + '</span><b>' + label + '</b></button>';
+  }
 
   function renderPlay() {
     var lv = play.level, st = play.state;
     var rows = lv.rows, cols = lv.cols;
     var cells = '';
+    var gates = Engine.activeBarriers ? Engine.activeBarriers(lv, st) : (lv.barriers || []);
     for (var r = 0; r < rows; r++) {
       for (var c = 0; c < cols; c++) {
         var obs = (lv.obstacles || []).some(function (o) { return o.r === r && o.c === c; });
-        var gate = (Engine.activeBarriers ? Engine.activeBarriers(lv, st) : (lv.barriers || [])).filter(function (b) {
-          return b.r === r && b.c === c;
-        })[0];
+        var gate = gates.filter(function (b) { return b.r === r && b.c === c; })[0];
         cells += '<div class="cell" style="grid-row:' + (r + 1) + ';grid-column:' + (c + 1) + '">' +
           (obs ? '<div class="obs">' + Art.crateSVG() + '</div>' : '') +
-          (gate ? '<div class="gate">' + Art.gateSVG() + '</div>' : '') +
-        '</div>';
+          (gate ? '<div class="gate">' + Art.gateSVG() + '</div>' : '') + '</div>';
       }
     }
-    var cars = st.cars.map(function (car) { return carHtml(car); }).join('');
-    var cap = holdCap(st);
+    var cars = st.cars.map(carHtml).join('');
+    var cap = Engine.holdCap(st);
     var bays = '';
     for (var i = 0; i < cap; i++) {
       var held = st.hold[i];
-      bays += '<div class="bay" data-bay="' + i + '"><span class="wp" data-wp="bay-' + i + '"></span>' +
-        (held ? deckCarHtml(held) : '') + '</div>';
+      bays += '<div class="bay' + (held ? ' full' : '') + '" data-bay="' + i + '"><span class="wp" data-wp="bay-' + i + '"></span>' +
+        (held ? deckCarHtml(held, 'E') : '<span class="bay-empty"><i>' + (i + 1) + '</i>' + Art.icon('dock', '#ffffffb0') + '</span>') + '</div>';
     }
     var ramps = st.docked.map(function (f, i) {
-      return '<div class="ramp" data-ramp="' + i + '"><span class="wp" data-wp="ramp-' + i + '"></span></div>';
+      return '<div class="ramp-col"><div class="ramp" data-ramp="' + i + '"><span class="wp" data-wp="ramp-' + i + '"></span></div></div>';
     }).join('');
+    var shown = play.shownDocked || {};
     var berths = st.docked.map(function (f, i) {
       var p = pal(f.color);
       var pips = '';
       for (var k = 0; k < f.capacity; k++) pips += '<i class="pip' + (k < f.loaded ? ' on' : '') + '"></i>';
-      var boarding = i === 0 || st.docked.length === 1 || true;
-      return '<div class="berth' + (boarding ? ' boarding' : '') + '" data-berth="' + i + '">' +
-        '<div class="berth-sign" style="background:' + p.fill + '">Boarding · ' + p.name +
-          ' · ' + f.loaded + '/' + f.capacity + '<span class="cap-pips">' + pips + '</span></div>' +
-        ferryHtml(f, 'arrive') +
-        '<span class="wp" data-wp="ferry-' + i + '"></span>' +
-      '</div>';
-    }).join('') || '<div class="berth"><div class="berth-sign">All ferries have sailed</div></div>';
-    var q = st.queue.map(function (f) {
+      return '<div class="berth boarding" data-berth="' + i + '" style="--fc:' + p.fill + '">' +
+        '<div class="berth-sign"><span class="dotc"></span>BOARDING <b>' + f.loaded + '/' + f.capacity + '</b><span class="cap-pips">' + pips + '</span></div>' +
+        ferryHtml(f, shown[f.id] ? '' : 'arrive') + '<span class="wp" data-wp="ferry-' + i + '"></span></div>';
+    }).join('') || '<div class="berth empty"><div class="berth-sign">All ferries sailed</div></div>';
+    play.shownDocked = {};
+    st.docked.forEach(function (f) { play.shownDocked[f.id] = true; });
+    var q = st.queue.map(function (f, i) {
       var p = pal(f.color);
-      return '<div class="qferry" data-qid="' + f.id + '" title="' + p.name + '">' +
-        Art.ferrySVG(f, { uid: 'q' }) +
-        '<span class="qcap">' + p.name + ' · ' + f.capacity + '</span></div>';
+      return '<div class="qferry" data-qid="' + f.id + '" title="' + p.name + '" style="--d:' + (i * 0.4) + 's">' +
+        '<span class="next-tag" style="--fc:' + p.fill + '">' + (i === 0 ? 'NEXT' : 'THEN') + '</span>' +
+        Art.ferrySVG(f, { stripe: save.skins.ferry === 'stripe' }) + '<span class="qcap">' + f.capacity + '</span></div>';
     }).join('');
-    var title = play.mode === 'daily' ? 'Daily' : ('Level ' + lv.id);
-    var undoLabel = play.freeUndos > 0 ? 'Undo' : (ECO.undoCost + ' · or ad');
+    var title = play.mode === 'daily' ? 'DAILY' : ('LEVEL ' + lv.id);
     view.innerHTML =
       '<div class="play">' +
-        '<div class="play-top">' + backBtn(play.mode === 'daily' ? 'daily' : 'levels') +
-          '<div class="level-badge"><div class="no">' + title + '</div><h2>' + (lv.name || '') + '</h2></div>' +
-          ticketsChip() + muteBtns() +
-        '</div>' +
-        '<div class="tools">' +
-          '<button type="button" class="tool" data-act="undo">' + Art.icon('undo') + '<span>' + undoLabel + '</span></button>' +
-          '<button type="button" class="tool" data-act="restart">' + Art.icon('restart') + '<span>Restart</span></button>' +
-          '<button type="button" class="tool hint" data-act="hint">' + Art.icon('hint') + '<span>Hint · ' + ECO.hintCost + '</span></button>' +
-          '<button type="button" class="tool dock" data-act="extra-bay">' + Art.icon('dock') + '<span>Bay · ' + ECO.extraBayCost + '</span></button>' +
+        '<div class="hud">' +
+          '<button type="button" class="level-pill" data-go="' + (play.mode === 'daily' ? 'daily' : 'levels') + '">' + Art.icon('back', '#fff') + '<span>' + title + '</span></button>' +
+          coinChip(true) + '<span class="grow"></span>' + gearBtn() + streakBadge() +
         '</div>' +
         '<div class="stage" id="stage">' +
-          '<div class="yard">' +
-            '<div class="deco tree-l">' + Art.treeSVG() + '</div>' +
-            '<div class="deco tree-r">' + Art.treeSVG() + '</div>' +
-            '<div class="road road-n"><span class="arrow">▶</span><span class="wp" data-wp="N"></span></div>' +
-            '<div class="yard-mid">' +
-              '<div class="road road-w"><span class="arrow">▼</span><span class="wp" data-wp="W"></span></div>' +
-              '<div class="lot" style="--rows:' + rows + ';--cols:' + cols + ';grid-template-rows:repeat(' + rows + ',1fr);grid-template-columns:repeat(' + cols + ',1fr)">' +
-                cells + cars +
+          '<div class="yard" id="yard">' +
+            '<div class="deco palm-l">' + Art.palmSVG() + '</div>' +
+            '<div class="deco palm-r">' + Art.palmSVG(true) + '</div>' +
+            '<div class="ring" id="ring">' +
+              '<div class="road road-n"><span class="wp" data-wp="N"></span></div>' +
+              '<div class="yard-mid">' +
+                '<div class="road road-w"><span class="wp" data-wp="W"></span></div>' +
+                '<div class="lot" id="lot" style="grid-template-rows:repeat(' + rows + ',1fr);grid-template-columns:repeat(' + cols + ',1fr)">' + cells + cars + '</div>' +
+                '<div class="road road-e"><span class="wp" data-wp="E"></span></div>' +
               '</div>' +
-              '<div class="road road-e"><span class="arrow">▼</span><span class="wp" data-wp="E"></span></div>' +
+              '<div class="road road-s"><span class="wp" data-wp="S"></span></div>' +
+              '<div class="deco cone">' + Art.coneSVG() + '</div>' +
             '</div>' +
-            '<div class="road road-s"><span class="arrow">▶</span>' +
-              '<span class="wp sw" data-wp="S-W"></span>' +
-              '<span class="wp" data-wp="S"></span>' +
-              '<span class="wp se" data-wp="S-E"></span>' +
-            '</div>' +
+            '<div class="deco bed-l">' + Art.flowerBedSVG() + '</div>' +
+            '<div class="deco rock-r">' + Art.rockSVG() + '</div>' +
+          '</div>' +
+          '<div class="dock-row" id="dock-row">' +
+            '<div class="bay-block" id="bay-block"><div class="bay-label"><span>Waiting</span><span>bays</span></div><div class="waiting-bays">' + bays + '</div></div>' +
+            '<div class="neck" id="neck"><span class="wp" data-wp="NECK"></span><i class="curb l"></i><i class="curb r"></i></div>' +
           '</div>' +
           '<div class="pier">' +
-            '<div class="pier-head"><span class="pier-label">Pier</span><span class="bay-label">Waiting bays</span></div>' +
-            '<div class="waiting-bays">' + bays + '</div>' +
-            '<div class="ramps">' + ramps + '</div>' +
-            '<span class="wp pier" data-wp="PIER"></span>' +
+            '<span class="wp pier-wp" data-wp="PIER"></span>' +
+            '<div class="posts"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>' +
           '</div>' +
+          '<div class="ramps">' + ramps + '</div>' +
           '<div class="berths">' + berths + '</div>' +
-          '<div class="water"><div class="foam"></div>' +
-            '<div class="queue-row"><span class="next-label">Next</span>' + (q || '<span style="color:#D6F4FF;font-size:12px;font-weight:700">Queue empty</span>') + '</div>' +
+          '<div class="water"><div class="sparkles"></div><div class="waves"></div>' +
+            '<div class="queue-row">' + (q || '<span class="q-empty">No more ferries in the queue</span>') + '</div>' +
           '</div>' +
         '</div>' +
-        '<div class="blurb">' + (lv.blurb || 'Tap a car with a clear path. It will drive the road to the pier.') + '</div>' +
+        '<div class="powerbar">' +
+          powerBtn('undo', 'undo', Art.icon('undo', '#fff'), 'Undo', play.freeUndos) +
+          powerBtn('hint', 'hint', Art.icon('hint'), 'Hint', save.hintTokens || 0) +
+          powerBtn('extra-bay', 'xbay', Art.icon('dock', '#fff'), 'Extra bay', save.bayTokens || 0) +
+        '</div>' +
       '</div>';
+    fitBoard();
+    if (play.intro) { play.intro = false; if (lv.blurb) introTip(lv.blurb); }
     maybeTutorial();
+  }
+
+  function fitBoard() {
+    var yard = document.getElementById('yard'), ring = document.getElementById('ring'), lot = document.getElementById('lot');
+    if (!yard || !ring || !lot || !play) return;
+    var lv = play.level;
+    var W = yard.clientWidth - 20, H = yard.clientHeight - 22;
+    var cell = Math.floor(Math.min((W - 2 * ROAD) / lv.cols, (H - 2 * ROAD) / lv.rows, 64));
+    cell = Math.max(28, cell);
+    lot.style.width = (cell * lv.cols) + 'px';
+    lot.style.height = (cell * lv.rows) + 'px';
+    ring.style.width = (cell * lv.cols + 2 * ROAD) + 'px';
+    play.cell = cell;
+    var stage = document.getElementById('stage'), neck = document.getElementById('neck'), bb = document.getElementById('bay-block');
+    if (stage && neck) {
+      var sr = stage.getBoundingClientRect(), rr = ring.getBoundingClientRect();
+      var nx = rr.right - sr.left - ROAD / 2;
+      var nw = 30;
+      neck.style.left = (nx - nw / 2) + 'px';
+      neck.style.width = nw + 'px';
+      if (bb) bb.style.right = (sr.width - (nx - nw / 2) + 6) + 'px';
+    }
+  }
+  window.addEventListener('resize', function () { if (screen === 'play') fitBoard(); });
+
+  function introTip(text) {
+    var stage = document.getElementById('stage');
+    if (!stage) return;
+    var n = document.createElement('div');
+    n.className = 'intro-tip';
+    n.textContent = text;
+    stage.appendChild(n);
+    setTimeout(function () { if (n.parentNode) n.parentNode.removeChild(n); }, 3600);
   }
 
   function maybeTutorial() {
@@ -515,14 +588,13 @@
     var legal = Engine.legalMoves(play.level, play.state);
     var step = play.tutorialStep || 0;
     var text = [
-      'Tap a car that can drive out — the road ahead must be empty.',
-      'Cars follow the road to the pier. Match the boarding ferry’s color to load.',
-      'Wrong color? The car parks in a waiting bay until its ferry docks.'
+      'Tap a car that can drive out. The road ahead must be clear.',
+      'Cars follow the road to the pier and board the ferry of their color.',
+      'Wrong color? It parks in a waiting bay until its ferry docks.'
     ][Math.min(step, 2)];
     var tutor = document.createElement('div');
     tutor.className = 'tutor';
-    tutor.innerHTML = '<div class="bubble">' + text +
-      '<div><button type="button" class="btn sm" data-act="tutor-next">Got it</button></div></div>';
+    tutor.innerHTML = '<div class="bubble">' + text + '<div><button type="button" class="btn sm" data-act="tutor-next">Got it</button></div></div>';
     if (step === 0 && legal[0]) {
       var car = stage.querySelector('[data-car="' + legal[0] + '"]');
       if (car) {
@@ -530,230 +602,318 @@
         var hand = document.createElement('div');
         hand.className = 'hand-wrap';
         hand.innerHTML = Art.handSVG();
-        hand.style.left = (cr.left - sr.left + cr.width * 0.35) + 'px';
-        hand.style.top = (cr.top - sr.top + cr.height * 0.35) + 'px';
+        hand.style.left = (cr.left - sr.left + cr.width * 0.4) + 'px';
+        hand.style.top = (cr.top - sr.top + cr.height * 0.4) + 'px';
         tutor.appendChild(hand);
       }
     }
     stage.appendChild(tutor);
   }
 
+  /* ---------------- motion + juice ---------------- */
   function wp(name, stage) {
     var el = stage.querySelector('[data-wp="' + name + '"]');
-    var sr = stage.getBoundingClientRect();
-    if (!el) return { x: sr.width / 2, y: sr.height * 0.7 };
-    var r = el.getBoundingClientRect();
+    if (!el) return null;
+    var sr = stage.getBoundingClientRect(), r = el.getBoundingClientRect();
     return { x: r.left + r.width / 2 - sr.left, y: r.top + r.height / 2 - sr.top };
   }
-
-  function buildPath(carEl, edge, destName, stage) {
-    var sr = stage.getBoundingClientRect();
-    var r = carEl.getBoundingClientRect();
-    var start = { x: r.left + r.width / 2 - sr.left, y: r.top + r.height / 2 - sr.top };
+  function buildPath(start, edge, destName, stage) {
+    var N = wp('N', stage), E = wp('E', stage), Wp = wp('W', stage), S = wp('S', stage);
     var pts = [start];
-    if (edge === 'N') { pts.push(wp('N', stage)); pts.push(wp('E', stage)); pts.push(wp('S-E', stage)); }
-    else if (edge === 'E') { pts.push(wp('E', stage)); pts.push(wp('S-E', stage)); }
-    else if (edge === 'W') { pts.push(wp('W', stage)); pts.push(wp('S-W', stage)); }
-    else { pts.push(wp('S', stage)); }
-    pts.push(wp('PIER', stage));
-    if (destName && destName.indexOf('ferry-') === 0) {
-      var idx = destName.split('-')[1];
-      pts.push(wp('ramp-' + idx, stage));
+    if (edge === 'N') pts.push({ x: start.x, y: N.y }, { x: E.x, y: N.y }, { x: E.x, y: S.y });
+    else if (edge === 'E') pts.push({ x: E.x, y: start.y }, { x: E.x, y: S.y });
+    else if (edge === 'W') pts.push({ x: Wp.x, y: start.y }, { x: Wp.x, y: S.y });
+    else pts.push({ x: start.x, y: S.y });
+    pts.push(S);
+    var neck = wp('NECK', stage), pier = wp('PIER', stage);
+    if (neck) pts.push({ x: S.x, y: neck.y });
+    if (pier) pts.push({ x: S.x, y: pier.y });
+    if (destName.indexOf('ferry-') === 0) {
+      var ramp = wp('ramp-' + destName.split('-')[1], stage);
+      if (ramp) { pts.push({ x: ramp.x, y: pts[pts.length - 1].y }); pts.push(ramp); }
     }
-    pts.push(wp(destName, stage));
-    return pts;
+    var dest = wp(destName, stage);
+    if (dest) {
+      if (destName.indexOf('bay-') === 0) pts.push({ x: dest.x, y: pts[pts.length - 1].y });
+      pts.push(dest);
+    }
+    return pts.filter(function (p, i) { return i === 0 || Math.hypot(p.x - pts[i - 1].x, p.y - pts[i - 1].y) > 1; });
   }
 
-  function animatePath(flyer, pts, w, h) {
+  function animatePath(flyer, pts, w, h, endScale, rot0) {
     var segs = [], total = 0, i;
     for (i = 1; i < pts.length; i++) {
       var dx = pts[i].x - pts[i - 1].x, dy = pts[i].y - pts[i - 1].y;
       var len = Math.hypot(dx, dy) || 1;
-      segs.push({ a: pts[i - 1], b: pts[i], len: len, ang: Math.atan2(dy, dx) });
+      segs.push({ a: pts[i - 1], b: pts[i], len: len, ang: Math.atan2(dy, dx) * 180 / Math.PI + 90 });
       total += len;
     }
-    var dur = Math.max(600, Math.min(1000, total * 1.15));
-    var frames = [];
-    var acc = 0;
-    segs.forEach(function (s) {
-      var rot = s.ang * 180 / Math.PI + 90;
-      var o0 = acc / total, o1;
+    if (!segs.length) return Promise.resolve();
+    var dur = Math.max(650, Math.min(1100, total * 1.1));
+    var frames = [], acc = 0, prevRot = rot0;
+    segs.forEach(function (s, k) {
+      var rot = s.ang;
+      while (rot - prevRot > 180) rot -= 360;
+      while (rot - prevRot < -180) rot += 360;
+      var sc1 = (k === segs.length - 1) ? (endScale || 1) : 1;
+      var o0 = acc / total;
       acc += s.len;
-      o1 = acc / total;
-      frames.push({ offset: o0, transform: 'translate(' + (s.a.x - w / 2) + 'px,' + (s.a.y - h / 2) + 'px) rotate(' + rot + 'deg)' });
-      frames.push({ offset: Math.min(1, o1), transform: 'translate(' + (s.b.x - w / 2) + 'px,' + (s.b.y - h / 2) + 'px) rotate(' + rot + 'deg)' });
+      frames.push({ offset: o0, transform: 'translate(' + (s.a.x - w / 2) + 'px,' + (s.a.y - h / 2) + 'px) rotate(' + rot + 'deg) scale(1)' });
+      frames.push({ offset: Math.min(1, acc / total), transform: 'translate(' + (s.b.x - w / 2) + 'px,' + (s.b.y - h / 2) + 'px) rotate(' + rot + 'deg) scale(' + sc1 + ')' });
+      prevRot = rot;
     });
-    if (frames.length) frames[frames.length - 1].offset = 1;
-    return flyer.animate(frames, { duration: dur, easing: 'linear', fill: 'forwards' }).finished.catch(function () {});
+    frames[0].offset = 0;
+    frames[frames.length - 1].offset = 1;
+    var anim = flyer.animate(frames, { duration: dur, delay: 110, easing: 'cubic-bezier(.45,.05,.4,1)', fill: 'forwards' });
+    return anim.finished.catch(function () {});
   }
 
-  function fxBanner(text) {
+  function dustTrail(flyer, stage, until) {
+    var t = setInterval(function () {
+      if (!flyer.parentNode) { clearInterval(t); return; }
+      var sr = stage.getBoundingClientRect(), r = flyer.getBoundingClientRect();
+      var d = document.createElement('i');
+      d.className = 'dust';
+      d.style.left = (r.left + r.width / 2 - sr.left - 8 + (Math.random() * 6 - 3)) + 'px';
+      d.style.top = (r.top + r.height / 2 - sr.top - 8 + (Math.random() * 6 - 3)) + 'px';
+      stage.appendChild(d);
+      setTimeout(function () { if (d.parentNode) d.parentNode.removeChild(d); }, 620);
+    }, 75);
+    until.then(function () { clearInterval(t); });
+  }
+
+  function fxBanner(text, cls) {
     var stage = document.getElementById('stage');
     if (!stage) return;
     var n = document.createElement('div');
-    n.className = 'fx-toast';
+    n.className = 'fx-toast ' + (cls || '');
     n.textContent = text;
     stage.appendChild(n);
-    setTimeout(function () { if (n.parentNode) n.parentNode.removeChild(n); }, 950);
+    setTimeout(function () { if (n.parentNode) n.parentNode.removeChild(n); }, 1050);
   }
 
   function flyTickets(n, fromEl) {
     var chip = document.querySelector('[data-tickets]');
-    if (!chip || !fromEl) { if (window.AudioFx && n) sfx('coin'); return; }
-    var a = fromEl.getBoundingClientRect();
-    var b = chip.getBoundingClientRect();
-    for (var i = 0; i < Math.min(n, 6); i++) {
+    if (!chip || !fromEl) { sfx('coin'); return; }
+    var a = fromEl.getBoundingClientRect(), b = chip.getBoundingClientRect();
+    for (var i = 0; i < Math.min(n, 7); i++) {
       var el = document.createElement('div');
       el.className = 'fly-ticket';
       el.innerHTML = Art.ticketSVG();
-      el.style.left = (a.left + a.width / 2 - 14 + (i - 1) * 8) + 'px';
-      el.style.top = (a.top + a.height / 2 - 10) + 'px';
+      el.style.left = (a.left + a.width / 2 - 14 + (i - 2) * 10) + 'px';
+      el.style.top = (a.top + a.height / 2 - 14) + 'px';
       document.body.appendChild(el);
       (function (node, delay) {
         setTimeout(function () {
           node.style.transform = 'translate(' + (b.left - a.left) + 'px,' + (b.top - a.top) + 'px) scale(.6)';
-          node.style.opacity = '0';
-        }, 20 + delay);
-        setTimeout(function () { if (node.parentNode) node.parentNode.removeChild(node); }, 800 + delay);
+          node.style.opacity = '0.2';
+        }, 30 + delay);
+        setTimeout(function () { if (node.parentNode) node.parentNode.removeChild(node); }, 850 + delay);
       })(el, i * 70);
     }
     sfx('coin');
   }
 
-  function destFor(result, nextState) {
-    if (result.how === 'hold') {
-      var idx = Math.max(0, nextState.hold.length - 1);
-      return 'bay-' + idx;
+  function burstConfetti(cx, cy, count) {
+    var cvs = document.getElementById('fx');
+    if (!cvs) return;
+    var ctx = cvs.getContext('2d');
+    cvs.width = innerWidth; cvs.height = innerHeight;
+    var bits = [], i, local = cy != null;
+    for (i = 0; i < (count || 90); i++) {
+      var ang = -Math.PI / 2 + (Math.random() - 0.5) * 2.4, sp = 3 + Math.random() * 5;
+      bits.push({
+        x: local ? cx : Math.random() * cvs.width, y: local ? cy : -20 - Math.random() * 80,
+        vx: local ? Math.cos(ang) * sp : -2 + Math.random() * 4, vy: local ? Math.sin(ang) * sp : 2 + Math.random() * 4,
+        w: 5 + Math.random() * 6, c: ['#F2393C', '#2F86FF', '#FFC81E', '#22C065', '#FF7A1A', '#FFFFFF'][i % 6], rot: Math.random() * 6
+      });
     }
+    var t = 0;
+    function tick() {
+      ctx.clearRect(0, 0, cvs.width, cvs.height);
+      bits.forEach(function (b) {
+        if (local) b.vy += 0.18;
+        b.y += b.vy; b.x += b.vx; b.rot += 0.15;
+        ctx.save(); ctx.translate(b.x, b.y); ctx.rotate(b.rot);
+        ctx.fillStyle = b.c; ctx.fillRect(-b.w / 2, -3, b.w, 6); ctx.restore();
+      });
+      if (++t < 95) requestAnimationFrame(tick); else ctx.clearRect(0, 0, cvs.width, cvs.height);
+    }
+    tick();
+  }
+
+  function splashAt(el) {
+    var stage = document.getElementById('stage');
+    if (!stage || !el) return;
+    var sr = stage.getBoundingClientRect(), r = el.getBoundingClientRect();
+    var s = document.createElement('div');
+    s.className = 'splash';
+    s.style.left = (r.left + r.width * 0.5 - sr.left) + 'px';
+    s.style.top = (r.top + r.height * 0.82 - sr.top) + 'px';
+    s.innerHTML = '<i></i><i></i><i></i><i></i><i></i><i></i><b></b>';
+    stage.appendChild(s);
+    setTimeout(function () { if (s.parentNode) s.parentNode.removeChild(s); }, 950);
+  }
+
+  function destFor(result, nextState) {
+    if (result.how === 'hold') return 'bay-' + Math.max(0, nextState.hold.length - 1);
     if (result.how === 'ferry') {
-      var docked = play._prevDocked || [];
-      var i, found = 0;
-      for (i = 0; i < docked.length; i++) if (docked[i].id === result.ferryId) { found = i; break; }
-      return result.sailed ? ('ramp-' + found) : ('ferry-' + found);
+      var docked = play._prevDocked || [], found = 0;
+      for (var i = 0; i < docked.length; i++) if (docked[i].id === result.ferryId) { found = i; break; }
+      return 'ferry-' + found;
     }
     return 'PIER';
   }
 
-  function finishMove(prev, result) {
-    renderPlay();
-    if (result.combo >= 2) {
-      fxBanner('COMBO ×' + result.combo);
-      bumpQuest('combo', 1);
-      save.stats.combos = (save.stats.combos || 0) + 1;
+  function sailAway(result, done) {
+    var fEl = document.querySelector('.ferry[data-ferry="' + result.ferryId + '"]');
+    if (!fEl) { done(); return; }
+    var prevF = (play._prevDockedFull || []).filter(function (f) { return f.id === result.ferryId; })[0];
+    if (prevF && result.car) {
+      var s = Art.ferrySlots(prevF.capacity)[prevF.loaded];
+      if (s) {
+        var d = document.createElement('div');
+        d.className = 'fslot pop';
+        d.style.cssText = 'left:' + s.x + '%;top:' + s.y + '%;width:' + s.w + '%;height:' + s.h + '%';
+        d.innerHTML = deckCarHtml(result.car, 'E');
+        fEl.querySelector('.ferry-slots').appendChild(d);
+      }
+    }
+    var berth = fEl.parentNode;
+    var sign = berth && berth.querySelector('.berth-sign');
+    if (sign) { sign.classList.add('full'); var b = sign.querySelector('b'); if (b) b.textContent = prevF.capacity + '/' + prevF.capacity; }
+    fxBanner('FERRY FULL!', 'big');
+    sfx('horn');
+    var r = fEl.getBoundingClientRect();
+    setTimeout(function () {
+      splashAt(fEl);
+      burstConfetti(r.left + r.width / 2, r.top + r.height * 0.4, 60);
+      fEl.classList.add('sailing');
+    }, 280);
+    setTimeout(done, 1050);
+  }
+
+  function finishMove(result) {
+    function after() {
+      renderPlay();
+      var st = play.state;
+      if (result.how === 'ferry' && !result.sailed) {
+        var f = document.querySelector('.ferry[data-ferry="' + result.ferryId + '"]');
+        if (f) {
+          f.classList.add('bob');
+          var slots = f.querySelectorAll('.fslot');
+          if (slots.length) slots[slots.length - 1].classList.add('pop');
+        }
+      }
+      if (result.how === 'hold') {
+        var bs = document.querySelectorAll('.waiting-bays .bay.full');
+        if (bs.length) bs[bs.length - 1].classList.add('pop');
+      }
+      if (result.combo >= 2) {
+        fxBanner('COMBO ×' + result.combo, 'combo');
+        bumpQuest('combo', 1);
+        save.stats.combos = (save.stats.combos || 0) + 1;
+      }
+      busy = false;
+      if (st.status === 'won') onWin();
+      else if (st.status === 'lost') onLose(result.how === 'jammed' ? 'Every waiting bay is full and no ferry matches.' : 'No car can reach the road.');
+      else if (moveQueue.length) tryMove(moveQueue.shift());
     }
     if (result.sailed) {
-      fxBanner('FERRY FULL!');
-      sfx('horn');
       save.stats.ferries = (save.stats.ferries || 0) + 1;
       bumpQuest('ferries', 1);
       save.tickets += (ECO.ferryFullBonus || 0);
       persist();
-    }
-    var st = play.state;
-    if (st.status === 'won') onWin();
-    else if (st.status === 'lost') onLose(result.how === 'jammed' ? 'The waiting bays are full.' : 'No car can reach the road.');
-    busy = false;
-    if (moveQueue.length && st.status === 'playing') {
-      var id = moveQueue.shift();
-      tryMove(id);
-    }
+      sailAway(result, after);
+    } else after();
   }
 
   function tryMove(carId) {
     if (!play || play.state.status !== 'playing') return;
-    if (busy) { moveQueue.push(carId); return; }
+    if (busy) { if (moveQueue.indexOf(carId) === -1) moveQueue.push(carId); return; }
     var lv = play.level, st = play.state;
     var car = st.cars.filter(function (c) { return c.id === carId; })[0];
     if (!car) return;
     var grid = Engine.occupancy(lv, st);
-    if (Engine.isLocked(car, st)) { sfx('bump'); toast('This car is locked. Free it with the key first.'); return; }
-    if (!Engine.canExit(lv, car, grid, st)) {
-      sfx('bump');
-      var el = document.querySelector('[data-car="' + carId + '"]');
-      if (el) { el.classList.add('shake'); setTimeout(function () { el.classList.remove('shake'); }, 400); }
+    var el = document.querySelector('[data-car="' + carId + '"]');
+    var locked = Engine.isLocked(car, st);
+    if (locked || !Engine.canExit(lv, car, grid, st)) {
+      sfx(locked ? 'bump' : 'honk');
+      if (locked) toast('Locked. Drive the key car out first.');
+      if (el) { el.classList.remove('shake'); void el.offsetWidth; el.classList.add('shake'); setTimeout(function () { el.classList.remove('shake'); }, 420); }
       return;
     }
     busy = true;
-    play._prevDocked = (st.docked || []).map(function (f) { return { id: f.id }; });
+    play._prevDocked = st.docked.map(function (f) { return { id: f.id }; });
+    play._prevDockedFull = Engine.clone(st.docked);
     play.history.push(Engine.clone(st));
     var step = Engine.apply(lv, st, carId);
     var result = step.result;
     play.state = step.state;
-    if (!result.ok && result.how === 'jammed') {
-      /* still animate onto a full pier then lose */
-    } else if (!result.ok) {
-      play.state = play.history.pop();
-      busy = false;
-      sfx('bump');
-      return;
-    }
-
-    var carEl = document.querySelector('[data-car="' + carId + '"]');
-    var stage = document.getElementById('stage');
-    if (!carEl || !stage || !carEl.animate) {
-      sfx('drive');
-      finishMove(st, result);
-      return;
-    }
-    var dest = destFor(result, play.state);
-    var box = carEl.getBoundingClientRect();
-    var flyer = carEl.cloneNode(true);
-    flyer.removeAttribute('data-car');
-    flyer.classList.add('flyer');
-    flyer.style.cssText = 'width:' + box.width + 'px;height:' + box.height + 'px;';
-    carEl.style.opacity = '0';
-    stage.appendChild(flyer);
-    sfx('drive');
+    if (!result.ok && result.how !== 'jammed') { play.state = play.history.pop(); busy = false; sfx('bump'); return; }
     if (play.tutorialStep === 0) play.tutorialStep = 1;
     else if (result.how === 'hold') play.tutorialStep = 2;
-    var pts = buildPath(carEl, result.edge || 'S', dest, stage);
-    animatePath(flyer, pts, box.width, box.height).then(function () {
+
+    var stage = document.getElementById('stage');
+    if (!el || !stage || !el.animate) { sfx('drive'); finishMove(result); return; }
+    var sr = stage.getBoundingClientRect(), box = el.getBoundingClientRect();
+    var cell = play.cell || 48, len = car.len || 1;
+    var fw = cell * 0.9, fh = cell * len * 0.9;
+    var start = { x: box.left + box.width / 2 - sr.left, y: box.top + box.height / 2 - sr.top };
+    var rot0 = { N: 0, E: 90, S: 180, W: 270 }[car.dir] || 0;
+    var flyer = document.createElement('div');
+    flyer.className = 'flyer';
+    flyer.style.width = fw + 'px';
+    flyer.style.height = fh + 'px';
+    flyer.style.transform = 'translate(' + (start.x - fw / 2) + 'px,' + (start.y - fh / 2) + 'px) rotate(' + rot0 + 'deg)';
+    flyer.innerHTML = Art.carSVG(car, { dir: 'N' });
+    stage.appendChild(flyer);
+    el.parentNode.removeChild(el);
+    var inner = flyer.firstElementChild;
+    if (inner && inner.animate) inner.animate([
+      { transform: 'scale(1,1)' }, { transform: 'scale(1.18,.82)' }, { transform: 'scale(.9,1.12)' }, { transform: 'scale(1,1)' }
+    ], { duration: 280, easing: 'ease-out' });
+    sfx('drive');
+    var dest = destFor(result, play.state);
+    var pts = buildPath(start, result.edge || 'S', dest, stage);
+    var endScale = dest.indexOf('ferry-') === 0 ? 0.5 : (dest.indexOf('bay-') === 0 ? 0.75 : 1);
+    var p = animatePath(flyer, pts, fw, fh, endScale, rot0);
+    dustTrail(flyer, stage, p);
+    p.then(function () {
       if (flyer.parentNode) flyer.parentNode.removeChild(flyer);
-      finishMove(st, result);
+      finishMove(result);
     });
   }
 
+  /* ---------------- level flow ---------------- */
   function undo() {
-    if (!play || !play.history.length || busy) return;
-    function applyUndo() {
-      play.state = play.history.pop();
-      moveQueue = [];
-      play.usedUndo = true;
-      renderPlay();
-    }
+    if (!play || busy) return;
+    if (!play.history.length) { toast('Nothing to undo'); return; }
+    function applyUndo() { play.state = play.history.pop(); moveQueue = []; renderPlay(); }
     if (play.freeUndos > 0) { play.freeUndos -= 1; applyUndo(); return; }
-    openModal(
-      '<h3>Undo</h3><p>Free undos are used up. Spend ' + ECO.undoCost + ' tickets or watch a placeholder ad.</p>' +
-      '<div class="actions">' +
-        '<button class="btn block" data-act="undo-pay">Spend ' + ECO.undoCost + '</button>' +
-        '<button class="btn teal block" data-act="undo-ad">Watch ad · 3 undos</button>' +
-        '<button class="btn ghost block" data-act="close-modal">Cancel</button>' +
-      '</div>'
-    );
+    openModal('<h3>Undo</h3><p>Free undos are used up for this level.</p><div class="actions">' +
+      '<button class="btn block" data-act="undo-pay">' + Art.ticketSVG() + ' Spend ' + ECO.undoCost + '</button>' +
+      '<button class="btn teal block" data-act="undo-ad">' + Art.icon('ad', '#fff') + ' Watch ad · 3 undos</button>' +
+      '<button class="btn ghost block" data-act="close-modal">Cancel</button></div>');
     modalRoot._undoApply = applyUndo;
   }
-
   function restart() {
     if (!play) return;
-    moveQueue = [];
-    busy = false;
+    moveQueue = []; busy = false;
     play.state = Engine.init(play.level);
     play.history = [];
     play.freeUndos = ECO.freeUndosPerLevel || 3;
+    play.shownDocked = {};
     renderPlay();
   }
-
   function rateStars(state) {
     var par = (play.level.parMoves || state.moves);
     if (state.moves <= par) return 3;
     if (state.moves <= par + 2) return 2;
     return 1;
   }
-
-  function grantWinRewards(stars, opts) {
-    opts = opts || {};
-    var reward = stars * (ECO.perStar || 5);
-    var first = false;
+  function grantWinRewards(stars) {
+    var reward = stars * (ECO.perStar || 5), first = false;
     if (play.mode !== 'daily') {
       var id = play.level.id;
       first = !save.cleared[id];
@@ -761,18 +921,16 @@
       save.stars[id] = Math.max(save.stars[id] || 0, stars);
       if (id >= (save.unlocked || 1)) save.unlocked = Math.min(LEVELS[LEVELS.length - 1].id, id + 1);
       bumpQuest('clear', 1);
+      save.seenTutorial = true;
     } else {
       reward += ECO.dailyPuzzleReward || 0;
       if (stars === 3) reward += ECO.dailyPuzzlePerfect || 0;
     }
-    if (stateComboBonus()) reward += Math.min(10, (play.state.maxCombo || 0) * (ECO.comboBonus || 0));
-    if (opts.double) reward *= 2;
+    if (play.state.maxCombo > 1) reward += Math.min(10, play.state.maxCombo * (ECO.comboBonus || 0));
     save.tickets += reward;
     persist();
     return { reward: reward, first: first };
   }
-  function stateComboBonus() { return play && play.state && play.state.maxCombo > 1; }
-
   function maybeInterstitial(then) {
     then = then || function () {};
     if (adsFree()) return then();
@@ -789,74 +947,42 @@
     Ads.showInterstitial().then(function () { then(); });
   }
 
-  function burstConfetti() {
-    var cvs = document.getElementById('fx');
-    if (!cvs) return;
-    var ctx = cvs.getContext('2d');
-    cvs.width = innerWidth; cvs.height = innerHeight;
-    var bits = [], i;
-    for (i = 0; i < 80; i++) bits.push({
-      x: Math.random() * cvs.width, y: -20 - Math.random() * 80,
-      vy: 2 + Math.random() * 4, vx: -2 + Math.random() * 4, w: 6 + Math.random() * 6,
-      c: ['#E23B3B', '#2F7BF6', '#F5C400', '#17A85C', '#F07810'][i % 5], rot: Math.random() * 6
-    });
-    var t = 0;
-    function tick() {
-      ctx.clearRect(0, 0, cvs.width, cvs.height);
-      bits.forEach(function (b) {
-        b.y += b.vy; b.x += b.vx; b.rot += 0.1;
-        ctx.save(); ctx.translate(b.x, b.y); ctx.rotate(b.rot);
-        ctx.fillStyle = b.c; ctx.fillRect(-b.w / 2, -3, b.w, 6); ctx.restore();
-      });
-      if (++t < 90) requestAnimationFrame(tick);
-      else ctx.clearRect(0, 0, cvs.width, cvs.height);
-    }
-    tick();
-  }
-
   function onWin() {
     var stars = rateStars(play.state);
     if (play.mode === 'daily') markDailyWin(stars, play.state.moves);
     sfx('win');
     burstConfetti();
-    renderPlay();
     var granted = grantWinRewards(stars);
     var chip = document.querySelector('[data-tickets]');
     if (chip) chip.textContent = save.tickets;
     var nextBtn = play.mode === 'daily'
-      ? '<button class="btn block" data-act="daily-share">Share result</button><button class="btn white block" data-go="daily">Back to daily</button>'
-      : '<button class="btn block" data-act="next">Next level</button>' +
-        '<button class="btn white block" data-act="after-win-replay">Replay</button>' +
-        '<button class="btn ghost block" data-act="after-win-levels">Levels</button>';
+      ? '<button class="btn green block" data-act="daily-share">' + Art.icon('share', '#fff') + ' Share result</button><button class="btn white block" data-go="daily">Back to daily</button>'
+      : '<button class="btn green mega block" data-act="next">Next level ' + Art.icon('play', '#fff') + '</button>' +
+        '<div class="home-row"><button class="btn white block" data-act="after-win-replay">' + Art.icon('restart') + ' Replay</button>' +
+        '<button class="btn white block" data-act="after-win-levels">Levels</button></div>';
     openModal(
       '<h3>' + (play.mode === 'daily' ? 'Harbor cleared!' : 'Cleared!') + '</h3>' +
       '<div class="star-row">' + [1, 2, 3].map(function (i) { return Art.icon(i <= stars ? 'star' : 'starOff').replace('class="ico"', 'class="ico' + (i <= stars ? ' on' : '') + '"'); }).join('') + '</div>' +
-      '<div class="reward">+' + granted.reward + ' tickets' + (granted.first ? ' · first clear' : '') + '</div>' +
-      '<p>' + play.state.moves + ' moves' + (play.state.maxCombo > 1 ? ' · combo ×' + play.state.maxCombo : '') + '</p>' +
-      '<div class="actions">' +
-        '<button class="btn teal block" data-act="double-coins">Watch ad · double tickets</button>' +
-        nextBtn +
-      '</div>'
-    );
+      '<div class="reward">' + Art.ticketSVG() + '<b>+' + granted.reward + '</b>' + (granted.first ? '<small>first clear</small>' : '') + '</div>' +
+      '<p>' + play.state.moves + ' moves' + (play.state.maxCombo > 1 ? ' · best combo ×' + play.state.maxCombo : '') + '</p>' +
+      '<div class="actions"><button class="btn teal block" data-act="double-coins">' + Art.icon('ad', '#fff') + ' Watch ad · double coins</button>' + nextBtn + '</div>',
+      'win');
     var modal = modalRoot.querySelector('.modal');
-    if (modal) flyTickets(Math.min(6, 2 + stars), modal.querySelector('.reward') || modal);
+    if (modal) flyTickets(Math.min(7, 3 + stars), modal.querySelector('.reward') || modal);
   }
 
   function onLose(why) {
     sfx('bump');
     var extra = play.mode === 'daily'
-      ? '<button class="btn teal block" data-act="streak-save">Watch ad · save streak</button>'
-      : '<button class="btn block" data-act="skip">Skip · ' + ECO.skipCost + ' tickets</button>';
+      ? '<button class="btn teal block" data-act="streak-save">' + Art.icon('ad', '#fff') + ' Watch ad · save streak</button>'
+      : '<button class="btn teal block" data-act="bay-ad-retry">' + Art.icon('ad', '#fff') + ' Watch ad · undo + extra bay</button>' +
+        '<button class="btn white block" data-act="skip">Skip level · ' + ECO.skipCost + ' coins</button>';
     openModal(
-      '<h3>Jammed</h3><p>' + (why || 'The waiting bays filled before the right ferry arrived.') + '</p>' +
-      '<div class="actions">' +
-        '<button class="btn block" data-act="restart-close">Try again</button>' +
-        extra +
-        '<button class="btn ghost block" data-act="after-win-levels">Levels</button>' +
-      '</div>'
-    );
+      '<h3>Jammed!</h3><div class="lose-art">' + Art.carSVG({ color: 'red', id: 'jam' }, { dir: 'E', kind: 'sedan' }) + Art.carSVG({ color: 'blue', id: 'jam2' }, { dir: 'W', kind: 'mini' }) + '</div>' +
+      '<p>' + (why || 'The waiting bays filled before the right ferry arrived.') + '</p>' +
+      '<div class="actions"><button class="btn mega block" data-act="restart-close">' + Art.icon('restart', '#fff') + ' Try again</button>' + extra +
+      '<button class="btn ghost block" data-act="after-win-levels">Levels</button></div>', 'lose');
   }
-
   function afterWinNav(kind) {
     closeModal();
     maybeInterstitial(function () {
@@ -865,29 +991,41 @@
       else if (kind === 'levels') { screen = 'levels'; play = null; render(); }
     });
   }
-
   function spend(cost, label) {
-    if (save.tickets < cost) { toast('Need ' + cost + ' tickets' + (label ? ' for ' + label : '')); return false; }
+    if (save.tickets < cost) { toast('Need ' + cost + ' coins' + (label ? ' for ' + label : '')); return false; }
     save.tickets -= cost;
     persist();
     return true;
   }
-
   function doHint() {
     var id = Engine.hint(play.level, play.state);
-    if (!id) { toast('No hint right now'); return; }
+    if (!id) { toast('No hint right now'); return false; }
     play.state.usedHint = true;
     var el = document.querySelector('[data-car="' + id + '"]');
     if (el) el.classList.add('hinting');
     toast('Try this car');
+    return true;
   }
-
   function doExtraBay() {
     play.state = Engine.addExtraSlot(play.state);
     renderPlay();
+    var b = document.querySelectorAll('.waiting-bays .bay');
+    if (b.length) b[b.length - 1].classList.add('pop');
     toast('Extra waiting bay added');
   }
-
+  function settingsModal() {
+    var inPlay = screen === 'play' && play;
+    openModal(
+      '<h3>Settings</h3><div class="settings">' +
+        '<button class="set-row" data-act="mute-sfx">' + Art.muteIcon('sfx', save.mutedSfx) + '<span>Sound effects</span><i class="tog' + (save.mutedSfx ? '' : ' on') + '"></i></button>' +
+        '<button class="set-row" data-act="mute-bgm">' + Art.muteIcon('bgm', save.mutedBgm) + '<span>Music</span><i class="tog' + (save.mutedBgm ? '' : ' on') + '"></i></button>' +
+      '</div><div class="actions">' +
+        (inPlay ? '<button class="btn block" data-act="restart-close">' + Art.icon('restart', '#fff') + ' Restart level</button>' : '') +
+        '<button class="btn white block" data-go="help">' + Art.icon('help') + ' How to play</button>' +
+        (inPlay ? '<button class="btn white block" data-go="home">' + Art.icon('home') + ' Home</button>' : '') +
+        '<button class="btn ghost block" data-act="close-modal">Close</button>' +
+      '</div><p class="fine dark">Ferry Jam by Jonidge · jonidge@yahoo.com</p>', 'settings-modal');
+  }
   function handleBuy(id) {
     var p = Economy.product(id);
     if (!p) return;
@@ -895,12 +1033,8 @@
       if (!res || !res.ok) return;
       if (p.tickets) save.tickets += p.tickets;
       if (p.type === 'ads' || (p.extras && p.extras.removeAds)) save.noAds = true;
-      if (p.type === 'starter') { save.starterBought = true; save.dockTokens = (save.dockTokens || 0) + 3; }
-      if (p.type === 'pass') {
-        save.harborPass = true;
-        save.harborPassUntil = Date.now() + 30 * 86400000;
-        save.noAds = true;
-      }
+      if (p.type === 'starter') { save.starterBought = true; save.hintTokens = (save.hintTokens || 0) + 3; }
+      if (p.type === 'pass') { save.harborPass = true; save.harborPassUntil = Date.now() + 30 * 86400000; save.noAds = true; }
       if (p.type === 'skin' && p.skin) {
         if (save.skins.owned.indexOf(p.skin.id) === -1) save.skins.owned.push(p.skin.id);
         save.skins[p.skin.kind] = p.skin.id;
@@ -910,157 +1044,131 @@
       if (screen === 'shop') renderShop();
     });
   }
-
   function rewarded(reason, onOk) {
-    Ads.showRewarded(reason).then(function (ok) {
-      if (!ok) return;
-      lastRewarded = Date.now();
-      if (typeof Ads.lastRewardedAt === 'function') lastRewarded = Ads.lastRewardedAt() || lastRewarded;
-      onOk();
-    });
+    Ads.showRewarded(reason).then(function (ok) { if (!ok) return; lastRewarded = Date.now(); onOk(); });
+  }
+  function setCnt(sel, n) {
+    var c = document.querySelector(sel);
+    if (!c) return;
+    c.textContent = n > 0 ? n : '+';
+    c.classList.toggle('plus', !(n > 0));
   }
 
+  /* ---------------- input ---------------- */
   function onClick(ev) {
     var t = ev.target.closest('[data-act],[data-go],[data-level],[data-car],[data-buy]');
     if (!t) return;
     if (window.AudioFx) { AudioFx.resume(); if (t.getAttribute('data-car') == null) sfx('tap'); }
-    var act = t.getAttribute('data-act');
-    var go = t.getAttribute('data-go');
-    var lvl = t.getAttribute('data-level');
-    var car = t.getAttribute('data-car');
-    var buy = t.getAttribute('data-buy');
-    if (go) { screen = go; render(); return; }
+    var act = t.getAttribute('data-act'), go = t.getAttribute('data-go');
+    var lvl = t.getAttribute('data-level'), car = t.getAttribute('data-car'), buy = t.getAttribute('data-buy');
+    if (go) { closeModal(); screen = go; render(); return; }
     if (lvl) { startLevel(Number(lvl)); return; }
     if (car) { tryMove(car); return; }
     if (buy) { handleBuy(buy); return; }
-    if (act === 'play-next') { if (!save.seenHelp) { screen = 'help'; render(); return; } startLevel(nextPlayable()); return; }
-    if (act === 'start-play') { save.seenHelp = true; persist(); startLevel(nextPlayable()); return; }
-    if (act === 'mute-sfx') { save.mutedSfx = !save.mutedSfx; persist(); applyMute(); render(); return; }
-    if (act === 'mute-bgm') { save.mutedBgm = !save.mutedBgm; persist(); applyMute(); render(); return; }
-    if (act === 'undo') { undo(); return; }
-    if (act === 'restart' || act === 'restart-close') { closeModal(); restart(); return; }
-    if (act === 'hint') {
-      openModal('<h3>Hint</h3><p>Spend ' + ECO.hintCost + ' tickets, or watch a placeholder ad.</p><div class="actions">' +
-        '<button class="btn block" data-act="hint-pay">Spend ' + ECO.hintCost + '</button>' +
-        '<button class="btn teal block" data-act="hint-ad">Watch ad</button>' +
-        '<button class="btn ghost block" data-act="close-modal">Cancel</button></div>');
-      return;
-    }
-    if (act === 'hint-pay') { closeModal(); if (spend(ECO.hintCost, 'a hint')) doHint(); return; }
-    if (act === 'hint-ad') { closeModal(); rewarded('hint', doHint); return; }
-    if (act === 'extra-bay') {
-      openModal('<h3>Extra waiting bay</h3><p>Add one more stall on the pier for this level.</p><div class="actions">' +
-        '<button class="btn block" data-act="bay-pay">Spend ' + ECO.extraBayCost + '</button>' +
-        '<button class="btn teal block" data-act="bay-ad">Watch ad</button>' +
-        '<button class="btn ghost block" data-act="close-modal">Cancel</button></div>');
-      return;
-    }
-    if (act === 'bay-pay') { closeModal(); if (spend(ECO.extraBayCost, 'an extra bay')) doExtraBay(); return; }
-    if (act === 'bay-ad') { closeModal(); rewarded('extra-bay', doExtraBay); return; }
-    if (act === 'undo-pay') { closeModal(); if (spend(ECO.undoCost, 'undo')) { play.freeUndos += 1; if (modalRoot._undoApply) modalRoot._undoApply(); } return; }
-    if (act === 'undo-ad') { closeModal(); rewarded('undo', function () { play.freeUndos += 3; if (modalRoot._undoApply) modalRoot._undoApply(); }); return; }
-    if (act === 'close-modal') { closeModal(); return; }
-    if (act === 'next') { afterWinNav('next'); return; }
-    if (act === 'after-win-replay') { afterWinNav('replay'); return; }
-    if (act === 'after-win-levels') { afterWinNav('levels'); return; }
-    if (act === 'double-coins') {
-      if (play.doubled) { toast('Already doubled'); return; }
-      rewarded('double-coins', function () {
-        play.doubled = true;
-        var stars = rateStars(play.state);
-        var add = stars * (ECO.perStar || 5);
-        if (play.mode === 'daily') add += ECO.dailyPuzzleReward || 0;
-        else if (!save.cleared[play.level.id]) { /* already granted first-clear */ }
-        save.tickets += add;
-        persist();
-        var rec = modalRoot.querySelector('.reward');
-        if (rec) rec.textContent = 'Tickets doubled!';
-        var chip = document.querySelector('[data-tickets]');
-        if (chip) chip.textContent = save.tickets;
-        toast('Tickets doubled');
-      });
-      return;
-    }
-    if (act === 'skip') {
-      closeModal();
-      if (play.mode === 'daily') return;
-      if (!spend(ECO.skipCost, 'a skip')) return;
-      var id = play.level.id;
-      save.unlocked = Math.max(save.unlocked || 1, id + 1);
-      persist();
-      maybeInterstitial(function () { startLevel(id + 1); });
-      return;
-    }
-    if (act === 'streak-save') {
-      closeModal();
-      rewarded('streak-save', function () {
-        save.streak.freeze = (save.streak.freeze || 0) + 1;
-        persist();
-        toast('Streak freeze ready');
-        restart();
-      });
-      return;
-    }
-    if (act === 'daily-play') { startLevel('daily', 'daily'); return; }
-    if (act === 'daily-share') {
-      var text = save.daily.result || ('Ferry Jam Daily ' + utcToday());
-      openModal('<h3>Share</h3><div class="share-box">' + text.replace(/</g, '') + '</div><div class="actions">' +
-        '<button class="btn block" data-act="copy-share">Copy</button>' +
-        '<button class="btn ghost block" data-act="close-modal">Close</button></div>');
-      modalRoot._share = text;
-      return;
-    }
-    if (act === 'copy-share') {
-      var tx = modalRoot._share || '';
-      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(tx).catch(function () {});
-      toast('Copied');
-      closeModal();
-      return;
-    }
-    if (act === 'buy-freeze') {
-      if (spend(ECO.streakFreezeCost, 'a streak freeze')) {
-        save.streak.freeze = (save.streak.freeze || 0) + 1;
-        persist();
-        toast('Freeze added');
-        renderDaily();
-      }
-      return;
-    }
-    if (act === 'claim-login') {
-      var amt = claimLogin(1);
-      if (amt) { sfx('coin'); toast('+' + amt + ' tickets'); renderRewards(); }
-      return;
-    }
-    if (act === 'claim-login-x2') {
-      rewarded('daily-double', function () {
-        var amt = claimLogin(2);
-        if (amt) { sfx('coin'); toast('+' + amt + ' tickets (×2)'); renderRewards(); }
-      });
-      return;
-    }
-    if (act === 'watch-ad') {
-      rewarded('tickets', function () {
-        save.tickets += ECO.adReward.tickets;
-        persist();
-        toast('+' + ECO.adReward.tickets + ' tickets');
-        renderShop();
-      });
-      return;
-    }
-    if (act === 'tutor-next') {
-      if (play) {
-        play.tutorialStep = (play.tutorialStep || 0) + 1;
-        if (play.tutorialStep >= 3) { save.seenTutorial = true; persist(); }
-      } else { save.seenTutorial = true; persist(); }
-      renderPlay();
-      return;
+    switch (act) {
+      case 'play-next': if (!save.seenHelp) { screen = 'help'; render(); return; } startLevel(nextPlayable()); return;
+      case 'start-play':
+        save.seenHelp = true; persist();
+        if (play && play.state.status === 'playing' && play.history.length) { screen = 'play'; render(); return; }
+        startLevel(play && play.mode === 'campaign' ? play.level.id : nextPlayable()); return;
+      case 'settings': settingsModal(); return;
+      case 'mute-sfx': save.mutedSfx = !save.mutedSfx; persist(); applyMute(); settingsModal(); return;
+      case 'mute-bgm': save.mutedBgm = !save.mutedBgm; persist(); applyMute(); settingsModal(); return;
+      case 'undo': undo(); return;
+      case 'restart': case 'restart-close': closeModal(); restart(); return;
+      case 'hint':
+        if (busy) return;
+        if ((save.hintTokens || 0) > 0) { if (doHint()) { save.hintTokens -= 1; persist(); setCnt('.power.hint .cnt', save.hintTokens); } return; }
+        openModal('<h3>Hint</h3><p>Out of free hints. Spend coins or watch a placeholder ad.</p><div class="actions">' +
+          '<button class="btn block" data-act="hint-pay">' + Art.ticketSVG() + ' Spend ' + ECO.hintCost + '</button>' +
+          '<button class="btn teal block" data-act="hint-ad">' + Art.icon('ad', '#fff') + ' Watch ad</button>' +
+          '<button class="btn ghost block" data-act="close-modal">Cancel</button></div>');
+        return;
+      case 'hint-pay': closeModal(); if (spend(ECO.hintCost, 'a hint')) doHint(); return;
+      case 'hint-ad': closeModal(); rewarded('hint', doHint); return;
+      case 'extra-bay':
+        if (busy) return;
+        if ((save.bayTokens || 0) > 0) { save.bayTokens -= 1; persist(); doExtraBay(); return; }
+        openModal('<h3>Extra bay</h3><p>Add one more waiting bay on the pier for this level.</p><div class="actions">' +
+          '<button class="btn block" data-act="bay-pay">' + Art.ticketSVG() + ' Spend ' + ECO.extraBayCost + '</button>' +
+          '<button class="btn teal block" data-act="bay-ad">' + Art.icon('ad', '#fff') + ' Watch ad</button>' +
+          '<button class="btn ghost block" data-act="close-modal">Cancel</button></div>');
+        return;
+      case 'bay-pay': closeModal(); if (spend(ECO.extraBayCost, 'an extra bay')) doExtraBay(); return;
+      case 'bay-ad': closeModal(); rewarded('extra-bay', doExtraBay); return;
+      case 'bay-ad-retry':
+        closeModal();
+        rewarded('extra-bay', function () { if (play.history.length) play.state = play.history.pop(); doExtraBay(); });
+        return;
+      case 'undo-pay': closeModal(); if (spend(ECO.undoCost, 'undo') && modalRoot._undoApply) modalRoot._undoApply(); return;
+      case 'undo-ad': closeModal(); rewarded('undo', function () { play.freeUndos += 2; if (modalRoot._undoApply) modalRoot._undoApply(); }); return;
+      case 'close-modal': closeModal(); return;
+      case 'next': afterWinNav('next'); return;
+      case 'after-win-replay': afterWinNav('replay'); return;
+      case 'after-win-levels': afterWinNav('levels'); return;
+      case 'double-coins':
+        if (play.doubled) { toast('Already doubled'); return; }
+        rewarded('double-coins', function () {
+          play.doubled = true;
+          var add = rateStars(play.state) * (ECO.perStar || 5) + (play.mode === 'daily' ? (ECO.dailyPuzzleReward || 0) : 0);
+          save.tickets += add; persist();
+          var rec = modalRoot.querySelector('.reward b');
+          if (rec) rec.textContent = 'Doubled!';
+          var chip = document.querySelector('[data-tickets]');
+          if (chip) chip.textContent = save.tickets;
+          var btn = modalRoot.querySelector('[data-act="double-coins"]');
+          if (btn) btn.setAttribute('disabled', '');
+          flyTickets(5, modalRoot.querySelector('.reward'));
+        });
+        return;
+      case 'skip':
+        closeModal();
+        if (play.mode === 'daily' || !spend(ECO.skipCost, 'a skip')) return;
+        var sid = play.level.id;
+        save.unlocked = Math.max(save.unlocked || 1, sid + 1); persist();
+        maybeInterstitial(function () { startLevel(sid + 1); });
+        return;
+      case 'streak-save':
+        closeModal();
+        rewarded('streak-save', function () { save.streak.freeze = (save.streak.freeze || 0) + 1; persist(); toast('Streak freeze ready'); restart(); });
+        return;
+      case 'daily-play': startLevel('daily', 'daily'); return;
+      case 'daily-share':
+        var text = save.daily.result || ('Ferry Jam Daily ' + utcToday());
+        openModal('<h3>Share</h3><div class="share-box">' + text.replace(/</g, '') + '</div><div class="actions">' +
+          '<button class="btn green block" data-act="copy-share">Copy</button><button class="btn ghost block" data-act="close-modal">Close</button></div>');
+        modalRoot._share = text;
+        return;
+      case 'copy-share':
+        if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(modalRoot._share || '').catch(function () {});
+        toast('Copied'); closeModal(); return;
+      case 'buy-freeze':
+        if (spend(ECO.streakFreezeCost, 'a streak freeze')) { save.streak.freeze = (save.streak.freeze || 0) + 1; persist(); toast('Freeze added'); renderDaily(); }
+        return;
+      case 'claim-login':
+        var amt = claimLogin(1);
+        if (amt) { sfx('coin'); toast('+' + amt + ' coins'); renderRewards(); }
+        return;
+      case 'claim-login-x2':
+        rewarded('daily-double', function () { var a2 = claimLogin(2); if (a2) { sfx('coin'); toast('+' + a2 + ' coins (×2)'); renderRewards(); } });
+        return;
+      case 'watch-ad':
+        rewarded('coins', function () { save.tickets += ECO.adReward.tickets; persist(); toast('+' + ECO.adReward.tickets + ' coins'); renderShop(); });
+        return;
+      case 'tutor-next':
+        if (play) {
+          play.tutorialStep = (play.tutorialStep || 0) + 1;
+          if (play.tutorialStep >= 3) { save.seenTutorial = true; persist(); }
+        } else { save.seenTutorial = true; persist(); }
+        var old = document.querySelector('.tutor');
+        if (old) old.parentNode.removeChild(old);
+        maybeTutorial();
+        return;
     }
   }
 
   document.addEventListener('click', onClick);
-  document.addEventListener('pointerdown', function once() {
-    if (window.AudioFx) AudioFx.resume();
-  }, { once: false });
+  document.addEventListener('pointerdown', function () { if (window.AudioFx) AudioFx.resume(); });
 
   save = load();
   syncStreakOnOpen();

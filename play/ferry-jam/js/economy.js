@@ -2,8 +2,8 @@
 (function (root) {
   'use strict';
   var E = {
-    currencyName: 'Tickets',
-    currencyCode: 'tickets',
+    currencyName: 'Coins',
+    currencyCode: 'coins',
     welcomeGift: 40,
     perStar: 5,
     firstClearBonus: 15,
@@ -35,10 +35,10 @@
     },
     loginCalendar: [10, 15, 20, 25, 30, 40, 80],
     products: [
-      { id: 'tickets_100',  title: '100 Tickets',     tickets: 100,  priceUSD: 0.99, tag: null },
-      { id: 'tickets_550',  title: '550 Tickets',     tickets: 550,  priceUSD: 4.99, tag: 'Popular' },
-      { id: 'tickets_1200', title: '1,200 Tickets',   tickets: 1200, priceUSD: 9.99, tag: 'Best' },
-      { id: 'tickets_2500', title: '2,500 Tickets',   tickets: 2500, priceUSD: 19.99, tag: null },
+      { id: 'tickets_100',  title: '100 Coins',       tickets: 100,  priceUSD: 0.99, tag: null },
+      { id: 'tickets_550',  title: '550 Coins',       tickets: 550,  priceUSD: 4.99, tag: 'Popular' },
+      { id: 'tickets_1200', title: '1,200 Coins',     tickets: 1200, priceUSD: 9.99, tag: 'Best' },
+      { id: 'tickets_2500', title: '2,500 Coins',     tickets: 2500, priceUSD: 19.99, tag: null },
       { id: 'remove_ads',   title: 'Remove Ads',      tickets: 0,    priceUSD: 3.99, tag: 'No ads', type: 'ads' },
       { id: 'starter_pack', title: 'Starter Pack',    tickets: 200,  priceUSD: 2.99, tag: 'Value', type: 'starter', extras: { removeAds7d: true, hint: 3 } },
       { id: 'harbor_pass',  title: 'Harbor Pass',     tickets: 0,    priceUSD: 4.99, tag: 'Pass', type: 'pass', extras: { removeAds: true, dailyBonus: 20, days: 30 } },

@@ -1,10 +1,26 @@
-/* Clawcastle renderer: everything is drawn in code (no image assets needed). */
+/* Clawcastle renderer: canvas art, plus painted village sprites when they are loaded. */
 (function (root) {
   'use strict';
   var D = root.CCData, COLS = D.COLS, ROWS = D.ROWS;
   var R = { view: {}, vis: {}, tvis: {}, svis: {}, parts: [], ghosts: [], floats: [], proj: [], held: {}, heldLock: {}, keep: {}, shake: 0, sel: null, lane: -1, banner: null, flash: 0 };
   var cv, ctx, dpr = 1, sprites = {}, spriteTs = 0;
   var FONT = '"Lilita One", "Fredoka", system-ui, sans-serif';
+  var ART = {}, ART_SRC = {
+    flag: 'flag.png', wall: 'wall.png', cannon: 'cannon.png', cat: 'cat.png',
+    gull: 'gull.png', chest: 'chest.png', palm: 'palm.png', umbrella: 'umbrella.png',
+    statue: 'statue.png', bucket: 'bucket.png', lantern: 'lantern.png'
+  };
+  var ART_SCALE = { flag: 1.72, wall: 1.28, cannon: 1.26, cat: 1.32, gull: 1.4, chest: 1.2, palm: 1.7, umbrella: 1.5, statue: 1.22, bucket: 1.16, lantern: 1.26 };
+  R.hasArt = function (k) { return !!(ART[k] && ART[k].complete && ART[k].naturalWidth); };
+  R.loadArt = function () {
+    Object.keys(ART_SRC).forEach(function (k) {
+      if (ART[k]) return;
+      var img = new Image();
+      img.src = 'assets/img/village/' + ART_SRC[k];
+      ART[k] = img;
+    });
+  };
+  try { R.loadArt(); } catch (e) {}
 
   R.init = function (canvas) { cv = canvas; ctx = cv.getContext('2d'); R.resize(); };
   R.resize = function () {
@@ -633,8 +649,55 @@
   };
 
 
-  // ---------- village (7x4 plots, front row at the bottom) ----------
-  R.drawDeco = function (c, id, x, y, S) {
+  // ---------- village (7x4 beach, front row at the bottom / sea) ----------
+  var sandPat = null;
+  function getSandPattern(c) {
+    if (sandPat) return sandPat;
+    var off = (typeof document !== 'undefined' && document.createElement) ? document.createElement('canvas') : null;
+    if (!off) return '#E8C684';
+    off.width = 128; off.height = 128;
+    var o = off.getContext('2d');
+    o.fillStyle = '#E8C684'; o.fillRect(0, 0, 128, 128);
+    for (var i = 0; i < 900; i++) {
+      o.fillStyle = (i % 3) ? 'rgba(255,245,220,.38)' : 'rgba(150,100,40,.2)';
+      o.beginPath(); o.arc((i * 37 + 11) % 128, (i * 53 + 29) % 128, 0.6 + (i % 4) * 0.4, 0, 7); o.fill();
+    }
+    sandPat = c.createPattern(off, 'repeat');
+    return sandPat;
+  }
+  function vHash(i, s) { var x = Math.sin(i * 127.1 + s * 311.7) * 43758.5453; return x - Math.floor(x); }
+
+  R.drawArt = function (c, k, x, y, slot, t, opt) {
+    opt = opt || {};
+    if (!R.hasArt(k)) return false;
+    var img = ART[k], sc = (opt.scale || ART_SCALE[k] || 1.2) * (opt.mul || 1);
+    var w = slot * sc, h = w * (img.naturalHeight / Math.max(1, img.naturalWidth));
+    var bob = 0;
+    if (k === 'gull') bob = Math.sin((t || 0) * 3 + (opt.seed || 0)) * slot * 0.03;
+    var sway = 0;
+    if (k === 'palm' || k === 'umbrella' || k === 'flag') sway = Math.sin((t || 0) * 1.35 + (opt.seed || 0)) * 0.035;
+    c.save();
+    if (!opt.noShadow) {
+      c.fillStyle = 'rgba(80,50,15,.28)';
+      c.beginPath(); c.ellipse(x, y + slot * 0.04, Math.max(10, w * 0.32), Math.max(4, slot * 0.11), 0, 0, 7); c.fill();
+    }
+    c.translate(x, y + bob);
+    if (sway) c.rotate(sway);
+    c.drawImage(img, -w / 2, -h + slot * 0.1, w, h);
+    if (k === 'lantern') {
+      var glow = 0.16 + 0.14 * Math.sin((t || 0) * 3);
+      var grd = c.createRadialGradient(0, -h * 0.58, 2, 0, -h * 0.58, slot * 0.55);
+      grd.addColorStop(0, 'rgba(255,230,140,' + glow + ')');
+      grd.addColorStop(1, 'rgba(255,200,80,0)');
+      c.globalCompositeOperation = 'lighter';
+      c.fillStyle = grd; c.beginPath(); c.arc(0, -h * 0.58, slot * 0.55, 0, 7); c.fill();
+    }
+    c.restore();
+    return true;
+  };
+
+  R.drawDeco = function (c, id, x, y, S, t) {
+    if (R.drawArt(c, id, x, y, S, t || 0, { seed: S })) return;
     c.save(); c.translate(x, y);
     if (id === 'palm') {
       c.fillStyle = '#8D5524'; c.fillRect(-3, -S * 0.05, 6, S * 0.45);
@@ -654,62 +717,295 @@
     }
     c.restore();
   };
+
+  function villageLayout(W, H, cam, mini) {
+    var seaH = mini ? H * 0.22 : Math.max(64, H * 0.16);
+    var skyH = mini ? H * 0.14 : Math.max(48, H * 0.12);
+    var landTop = skyH * 0.85;
+    var landBot = H - seaH * 0.62;
+    var areaH = Math.max(40, landBot - landTop);
+    var padX = mini ? Math.max(4, W * 0.04) : Math.max(10, W * 0.03);
+    var tw = (W - padX * 2) / (D.VCOLS + 0.15);
+    var th = areaH / (D.VROWS + 0.08);
+    // Keep a gentle 3/4 tilt but let the four rows fill the beach down to the sea.
+    th = Math.min(th, tw * 1.08);
+    tw = Math.min(tw, th * 1.7);
+    var ox = (W - tw * D.VCOLS) / 2;
+    var oy = landBot - th * D.VROWS;
+    if (oy < landTop) oy = landTop;
+    return { W: W, H: H, tw: tw, th: th, ox: ox, oy: oy, seaY: H - seaH, skyH: skyH, cam: cam || { x: 0, y: 0, z: 1 }, mini: !!mini };
+  }
+  function cellCenter(v, col, row) {
+    var fr = (D.VROWS - 1) - row;
+    var skew = v.tw * 0.06;
+    return { x: v.ox + (col + 0.5) * v.tw + fr * skew, y: v.oy + (fr + 0.58) * v.th, tw: v.tw, th: v.th, fr: fr };
+  }
+  function villageUnproject(sx, sy, v) {
+    var z = (v.cam && v.cam.z) || 1, px = (v.cam && v.cam.x) || 0, py = (v.cam && v.cam.y) || 0;
+    var pvx = v.W / 2, pvy = v.oy + v.th * 2;
+    return { x: (sx - pvx) / z + pvx - px, y: (sy - pvy) / z + pvy - py };
+  }
+  R.villageUnproject = villageUnproject;
   R.villageCellAt = function (x, y, view) {
     var v = view || R.vview; if (!v) return null;
-    var c = Math.floor((x - v.ox) / v.tw), rFront = Math.floor((y - v.oy) / v.th);
-    // displayed with front (row 0) at the bottom
-    var r = (D.VROWS - 1) - rFront;
-    if (c < 0 || r < 0 || c >= D.VCOLS || r >= D.VROWS) return null;
-    return { r: r, c: c };
+    var p = villageUnproject(x, y, v);
+    var best = null, bestD = 1.25;
+    for (var r = 0; r < D.VROWS; r++) {
+      for (var col = 0; col < D.VCOLS; col++) {
+        var q = cellCenter(v, col, r);
+        var dx = Math.abs(p.x - q.x) / (q.tw * 0.52);
+        var dy = Math.abs(p.y - q.y) / (q.th * 0.55);
+        var d = dx + dy;
+        if (d < bestD) { bestD = d; best = { r: r, c: col }; }
+      }
+    }
+    return best;
   };
-  R.drawVillage = function (c, grid, opt) {
-    opt = opt || {};
-    var W = opt.W, H = opt.H, t = opt.t || 0, sel = opt.sel, skin = opt.skin || 'default';
-    var VROWS = D.VROWS, VCOLS = D.VCOLS;
-    var skyTop = 0.14;
-    var sky = c.createLinearGradient(0, 0, 0, H * skyTop + 20);
-    if (skin === 'sunset') { sky.addColorStop(0, '#FF8A5B'); sky.addColorStop(1, '#FFD19A'); }
-    else if (skin === 'royal') { sky.addColorStop(0, '#3A4FB8'); sky.addColorStop(1, '#9BB6FF'); }
-    else { sky.addColorStop(0, '#7FDBFF'); sky.addColorStop(1, '#BFF0FF'); }
+
+  function drawSky(c, W, H, t, skin, mini) {
+    var skyH = mini ? H * 0.42 : H * 0.38;
+    var sky = c.createLinearGradient(0, 0, 0, skyH);
+    if (skin === 'sunset') { sky.addColorStop(0, '#FF8A5B'); sky.addColorStop(0.55, '#FFB36A'); sky.addColorStop(1, '#FFE0A0'); }
+    else if (skin === 'royal') { sky.addColorStop(0, '#1E2A8A'); sky.addColorStop(0.6, '#5B7CDB'); sky.addColorStop(1, '#B8D4FF'); }
+    else { sky.addColorStop(0, '#5EC8FF'); sky.addColorStop(0.55, '#9EE7FF'); sky.addColorStop(1, '#E7F8C8'); }
     c.fillStyle = sky; c.fillRect(0, 0, W, H);
-    c.fillStyle = skin === 'sunset' ? '#FFCF70' : '#FFF4B8'; c.beginPath(); c.arc(W * 0.82, H * 0.07, 22, 0, 7); c.fill();
-    var seaY = H * skyTop;
-    c.fillStyle = '#22B8E0'; c.fillRect(0, seaY, W, H * 0.12);
-    c.strokeStyle = 'rgba(255,255,255,.5)'; c.lineWidth = 2;
-    c.beginPath(); for (var x = 0; x <= W; x += 10) c.lineTo(x, seaY + 8 + Math.sin(x / 30 + t) * 3); c.stroke();
-    var pad = 10, top = seaY + H * 0.13, bot = H - 8;
-    var tw = Math.floor((W - pad * 2) / VCOLS), th = Math.floor((bot - top) / VROWS);
-    var ox = Math.round((W - tw * VCOLS) / 2), oy = top;
-    R.vview = { ox: ox, oy: oy, tw: tw, th: th, W: W, H: H };
-    // sand plots, front at the bottom
-    for (var rr = 0; rr < VROWS; rr++) {
-      var r = (VROWS - 1) - rr; // data row
-      for (var col = 0; col < VCOLS; col++) {
-        var px = ox + col * tw, py = oy + rr * th;
-        var even = (rr + col) % 2 === 0;
-        c.fillStyle = even ? '#F3D7A0' : '#E8C684';
-        rr_fn(c, px + 3, py + 3, tw - 6, th - 6, 10); c.fill();
-        c.strokeStyle = 'rgba(160,110,50,.35)'; c.lineWidth = 1; c.stroke();
-        if (sel && sel.r === r && sel.c === col) {
-          c.strokeStyle = '#FF8A2B'; c.lineWidth = 3; c.stroke();
-        }
-        var cell = grid[r] && grid[r][col];
-        var cx = px + tw / 2, cy = py + th * 0.55;
-        if (cell && cell.deco) R.drawDeco(c, cell.id, cx, cy, Math.min(tw, th) * 0.85);
-        else if (cell) {
-          var bw = tw * 0.72, bh = th * 0.62;
-          R.drawBuilding(c, D.BUILD[cell.code].k, cx, cy - 4, bw, bh, t + col, {});
-          if (cell.lv > 1) {
-            c.font = 'bold 11px ' + FONT; c.fillStyle = '#8A5A00'; c.textAlign = 'center';
-            c.fillText('Lv ' + cell.lv, cx, py + th - 8);
-          }
+    // sun / moon
+    if (skin === 'royal') {
+      c.fillStyle = 'rgba(255,255,230,.9)'; c.beginPath(); c.arc(W * 0.82, H * 0.07, mini ? 8 : 16, 0, 7); c.fill();
+    } else {
+      c.fillStyle = skin === 'sunset' ? '#FFE08A' : '#FFF4B0';
+      c.beginPath(); c.arc(W * 0.84, H * 0.07, mini ? 10 : 20, 0, 7); c.fill();
+      c.fillStyle = skin === 'sunset' ? 'rgba(255,180,80,.28)' : 'rgba(255,255,200,.28)';
+      c.beginPath(); c.arc(W * 0.84, H * 0.07, mini ? 18 : 38, 0, 7); c.fill();
+    }
+    if (mini) return;
+    c.fillStyle = skin === 'royal' ? 'rgba(255,255,255,.22)' : 'rgba(255,255,255,.55)';
+    for (var i = 0; i < 3; i++) {
+      var cx = ((i * 0.33 + t * 0.01) % 1.3 - 0.15) * W, cy = 18 + i * 16;
+      c.beginPath(); c.ellipse(cx, cy, 36 + i * 8, 10, 0, 0, 7); c.fill();
+      c.beginPath(); c.ellipse(cx + 22, cy + 2, 24, 8, 0, 0, 7); c.fill();
+    }
+  }
+  function drawSea(c, v, t, skin) {
+    var W = v.W, H = v.H, seaY = v.seaY;
+    var g = c.createLinearGradient(0, seaY - 16, 0, H + 20);
+    if (skin === 'sunset') { g.addColorStop(0, '#FFC17A'); g.addColorStop(0.2, '#5EC6D8'); g.addColorStop(1, '#1A6FA0'); }
+    else if (skin === 'royal') { g.addColorStop(0, '#89B4FF'); g.addColorStop(0.3, '#2E6CC0'); g.addColorStop(1, '#123A7A'); }
+    else { g.addColorStop(0, '#9AF0EA'); g.addColorStop(0.18, '#3ECDEB'); g.addColorStop(0.7, '#1A8FC4'); g.addColorStop(1, '#0D5E8A'); }
+    c.fillStyle = g; c.fillRect(-40, seaY - 8, W + 80, H - seaY + 40);
+    for (var i = 0; i < 6; i++) {
+      c.beginPath();
+      var y0 = seaY + 6 + i * (v.mini ? 6 : 11);
+      c.moveTo(-20, y0);
+      for (var x = -20; x <= W + 20; x += 8) c.lineTo(x, y0 + Math.sin(x / (16 + i * 5) + t * (1.1 + i * 0.12) + i) * (2.2 + i * 0.45));
+      c.strokeStyle = 'rgba(255,255,255,' + (0.55 - i * 0.07) + ')';
+      c.lineWidth = i === 0 ? 2.6 : 1.3; c.stroke();
+    }
+    if (v.mini) return;
+    for (var j = 0; j < 10; j++) {
+      var fx = ((j * 47 + t * 22) % (W + 60)) - 30;
+      var fy = seaY + 5 + Math.sin(t * 2.1 + j) * 3.5;
+      c.fillStyle = 'rgba(255,255,255,' + (0.55 + 0.3 * Math.sin(t * 3 + j)) + ')';
+      c.beginPath(); c.ellipse(fx, fy, 14 + (j % 3) * 5, 3.5, 0, 0, 7); c.fill();
+    }
+  }
+  function drawIsland(c, v, t, skin) {
+    var W = v.W, H = v.H;
+    var top = v.oy - v.th * 0.05;
+    var bot = v.seaY + 8;
+    var midX = v.ox + v.tw * 3.5;
+    c.save();
+    // Grassy hinterland from the sky down to just behind the keep, so the
+    // tall portrait canvas never shows a huge empty sand field.
+    if (!v.mini) {
+      var ridgeY = Math.max(v.skyH * 0.22, 16);
+      var meetY = v.oy + v.th * 0.15;
+      c.beginPath();
+      c.moveTo(-40, meetY + 30);
+      c.lineTo(-40, ridgeY + 20);
+      c.quadraticCurveTo(W * 0.12, ridgeY - 8, W * 0.28, ridgeY + 14);
+      c.quadraticCurveTo(W * 0.5, ridgeY - 18, W * 0.72, ridgeY + 12);
+      c.quadraticCurveTo(W * 0.9, ridgeY - 4, W + 40, ridgeY + 24);
+      c.lineTo(W + 40, meetY + 30);
+      c.closePath();
+      var dune = c.createLinearGradient(0, ridgeY, 0, meetY);
+      dune.addColorStop(0, '#B5DC5A');
+      dune.addColorStop(0.22, '#D4E27A');
+      dune.addColorStop(0.55, '#E8D48A');
+      dune.addColorStop(1, '#F3D7A0');
+      c.fillStyle = dune; c.fill();
+      // rolling mid-dunes
+      c.fillStyle = 'rgba(180, 200, 80, .35)';
+      for (var d = 0; d < 5; d++) {
+        var dx = W * (0.1 + d * 0.2), dy = ridgeY + 36 + vHash(d, 6) * (meetY - ridgeY) * 0.45;
+        c.beginPath(); c.ellipse(dx, dy, 50 + vHash(d, 7) * 40, 16 + vHash(d, 8) * 10, -0.15, 0, 7); c.fill();
+      }
+      // grass tufts across the hinterland
+      for (var g = 0; g < 42; g++) {
+        var gx = vHash(g, 11) * W, gy = ridgeY + 8 + vHash(g, 12) * (meetY - ridgeY - 20);
+        c.strokeStyle = g % 3 ? '#7CB342' : '#558B2F'; c.lineWidth = 1.5;
+        c.beginPath();
+        c.moveTo(gx, gy + 5);
+        c.quadraticCurveTo(gx - 2.5, gy - 5 - vHash(g, 13) * 6, gx, gy + 5);
+        c.quadraticCurveTo(gx + 2.5, gy - 6 - vHash(g, 14) * 5, gx, gy + 5);
+        c.stroke();
+      }
+      // a few distant tiny palms on the ridge
+      for (d = 0; d < 3; d++) {
+        var px = W * (0.18 + d * 0.32), py = ridgeY + 8 + vHash(d, 20) * 10;
+        c.fillStyle = '#8D5524'; c.fillRect(px - 1.5, py, 3, 14);
+        c.fillStyle = '#4CAF50';
+        for (var fr = -1; fr <= 1; fr++) {
+          c.beginPath(); c.ellipse(px + fr * 7, py - 2, 8, 3.5, fr * 0.6, 0, 7); c.fill();
         }
       }
     }
-    // front label
-    c.font = 'bold 11px "Fredoka",sans-serif'; c.fillStyle = 'rgba(90,50,10,.6)'; c.textAlign = 'left';
-    c.fillText('FRONT  (raiders attack from here)', ox + 4, oy + VROWS * th - 2);
-    c.textAlign = 'center'; c.fillText('KEEP', ox + 3.5 * tw, oy + 12);
+    c.beginPath();
+    c.moveTo(-20, bot + 20);
+    c.lineTo(-20, bot);
+    c.quadraticCurveTo(W * 0.08, v.oy + v.th * 0.2, midX - v.tw * 4.2, top + v.th * 0.4);
+    c.quadraticCurveTo(midX, top - v.th * 0.12, midX + v.tw * 4.2, top + v.th * 0.4);
+    c.quadraticCurveTo(W * 0.92, v.oy + v.th * 0.2, W + 20, bot);
+    c.lineTo(W + 20, bot + 20);
+    c.closePath();
+    var sand = c.createLinearGradient(0, top, 0, bot);
+    if (skin === 'sunset') { sand.addColorStop(0, '#F8C98A'); sand.addColorStop(0.7, '#E8B36A'); sand.addColorStop(1, '#C98A4A'); }
+    else { sand.addColorStop(0, '#FBE7B5'); sand.addColorStop(0.55, '#F0D49A'); sand.addColorStop(1, '#D9A86A'); }
+    c.fillStyle = sand; c.fill();
+    c.fillStyle = getSandPattern(c); c.globalAlpha = 0.45; c.fill(); c.globalAlpha = 1;
+    // wet sand near the water
+    var wet = c.createLinearGradient(0, v.seaY - 28, 0, v.seaY + 10);
+    wet.addColorStop(0, 'rgba(210,160,90,0)'); wet.addColorStop(0.6, 'rgba(200,150,80,.35)'); wet.addColorStop(1, 'rgba(80,160,180,.35)');
+    c.fillStyle = wet; c.fillRect(-20, v.seaY - 30, W + 40, 50);
+    // soft dunes
+    c.fillStyle = 'rgba(255,245,220,.22)';
+    for (var i = 0; i < 6; i++) {
+      var dx = v.ox + vHash(i, 2) * v.tw * 7, dy = v.oy + vHash(i, 3) * v.th * 3.5;
+      c.beginPath(); c.ellipse(dx, dy, 28 + vHash(i, 4) * 24, 8 + vHash(i, 5) * 6, -0.2, 0, 7); c.fill();
+    }
+    if (!v.mini) {
+      // scattered shells / pebbles
+      for (i = 0; i < 14; i++) {
+        var sx = v.ox + vHash(i, 8) * v.tw * 7, sy = v.oy + vHash(i, 9) * v.th * 4;
+        c.save(); c.translate(sx, sy); c.rotate(vHash(i, 10) * 6);
+        c.fillStyle = i % 2 ? 'rgba(255,160,160,.7)' : 'rgba(200,200,220,.7)';
+        c.beginPath(); c.ellipse(0, 0, 3 + (i % 3), 2, 0, 0, 7); c.fill();
+        c.restore();
+      }
+    }
+    c.restore();
+  }
+  function drawPlotMark(c, q, sel, showGrid, valid) {
+    if (!showGrid && !sel) return;
+    c.save();
+    c.beginPath();
+    c.moveTo(q.x, q.y - q.th * 0.42);
+    c.lineTo(q.x + q.tw * 0.46, q.y);
+    c.lineTo(q.x, q.y + q.th * 0.42);
+    c.lineTo(q.x - q.tw * 0.46, q.y);
+    c.closePath();
+    if (sel) {
+      c.fillStyle = 'rgba(255,138,43,.22)'; c.fill();
+      c.shadowColor = '#FFB347'; c.shadowBlur = 12;
+      c.strokeStyle = '#FF8A2B'; c.lineWidth = 2.6; c.stroke();
+    } else if (showGrid) {
+      c.fillStyle = valid ? 'rgba(80,200,120,.12)' : 'rgba(255,255,255,.1)'; c.fill();
+      c.strokeStyle = valid ? 'rgba(255,255,255,.7)' : 'rgba(255,255,255,.35)';
+      c.lineWidth = 1.2; c.stroke();
+    }
+    c.restore();
+  }
+
+  R.drawVillageItem = function (c, cell, x, y, slot, t, opt) {
+    if (!cell) return;
+    if (cell.deco) { R.drawDeco(c, cell.id, x, y, slot, t); return; }
+    var k = D.BUILD[cell.code] ? D.BUILD[cell.code].k : 'wall';
+    if (!R.drawArt(c, k, x, y, slot, t, opt || {})) R.drawBuilding(c, k, x, y - 4, slot * 0.86, slot * 0.7, t, {});
+    if (cell.lv > 1) {
+      c.save();
+      c.font = 'bold 11px "Fredoka",sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle';
+      var lw = 26, lh = 12;
+      c.fillStyle = 'rgba(80,45,10,.72)'; rr(c, x - lw / 2, y - 2, lw, lh, 6); c.fill();
+      c.fillStyle = '#FFE9A8'; c.fillText('Lv ' + cell.lv, x, y - 2 + lh / 2);
+      c.restore();
+    }
+  };
+
+  R.drawVillage = function (c, grid, opt) {
+    opt = opt || {};
+    var W = opt.W, H = opt.H, t = opt.t || 0, sel = opt.sel, skin = opt.skin || 'default';
+    var placing = !!opt.placing, mini = !!opt.mini, cam = opt.cam || { x: 0, y: 0, z: 1 };
+    var v = villageLayout(W, H, cam, mini);
+    R.vview = v;
+    drawSky(c, W, H, t, skin, mini);
+    c.save();
+    var z = cam.z || 1, pvx = W / 2, pvy = v.oy + v.th * 2;
+    c.translate(pvx, pvy); c.scale(z, z); c.translate(-pvx + (cam.x || 0), -pvy + (cam.y || 0));
+    drawSea(c, v, t, skin);
+    drawIsland(c, v, t, skin);
+
+    var r, col, q, cell;
+    // plot marks first (under buildings)
+    for (r = D.VROWS - 1; r >= 0; r--) {
+      for (col = 0; col < D.VCOLS; col++) {
+        q = cellCenter(v, col, r);
+        cell = grid[r] && grid[r][col];
+        var isSel = sel && sel.r === r && sel.c === col;
+        var from = opt.moveFrom && opt.moveFrom.r === r && opt.moveFrom.c === col;
+        drawPlotMark(c, q, isSel || from, placing, !cell);
+      }
+    }
+    // ambient scenery, y-sorted with buildings
+    var draws = [];
+    if (!mini) {
+      var amb = [
+        { k: 'palm', x: v.ox - v.tw * 0.62, y: v.oy + v.th * 0.15, s: v.tw * 1.05, seed: 1 },
+        { k: 'palm', x: v.ox + v.tw * 7.55, y: v.oy + v.th * 0.35, s: v.tw * 0.95, seed: 2 },
+        { k: 'palm', x: v.ox - v.tw * 0.7, y: v.seaY - 18, s: v.tw * 0.8, seed: 3 },
+        { k: 'umbrella', x: v.ox + v.tw * 7.55, y: v.seaY - 16, s: v.tw * 0.62, seed: 4 }
+      ];
+      amb.forEach(function (a) {
+        draws.push({ y: a.y, z: 0, fn: (function (a) { return function () { R.drawArt(c, a.k, a.x, a.y, a.s, t, { seed: a.seed }) || R.drawDeco(c, a.k, a.x, a.y, a.s, t); }; })(a) });
+      });
+    }
+    for (r = D.VROWS - 1; r >= 0; r--) {
+      for (col = 0; col < D.VCOLS; col++) {
+        cell = grid[r] && grid[r][col];
+        if (!cell) continue;
+        q = cellCenter(v, col, r);
+        draws.push({ y: q.y, z: 1, fn: (function (cell, q, r, col) {
+          return function () { R.drawVillageItem(c, cell, q.x, q.y, v.tw, t + col * 0.3, { seed: r * 7 + col }); };
+        })(cell, q, r, col) });
+      }
+    }
+    if (!mini) {
+      // wandering crabs along the shoreline
+      var crew = ['shieldcrab', 'lobster', 'spinner'];
+      for (var i = 0; i < 3; i++) {
+        var pathW = v.tw * 6.2;
+        var cx2 = v.ox + v.tw * 0.6 + ((t * (8 + i * 3) + i * 90) % pathW);
+        if (Math.floor((t * (8 + i * 3) + i * 90) / pathW) % 2) cx2 = v.ox + v.tw * 0.6 + pathW - ((t * (8 + i * 3) + i * 90) % pathW);
+        var cy2 = v.seaY - 10 - (i % 2) * 8;
+        draws.push({ y: cy2, z: 2, fn: (function (kind, x, y, seed) {
+          return function () { if (R.drawTroop) R.drawTroop(c, kind, x, y, Math.max(16, v.tw * 0.28), t, { seed: seed }); };
+        })(crew[i], cx2, cy2, i + 10) });
+      }
+    }
+    draws.sort(function (a, b) { return (a.y - b.y) || (a.z - b.z); });
+    draws.forEach(function (d) { d.fn(); });
+    c.restore();
+
+    if (!mini) {
+      c.save();
+      c.font = 'bold 11px "Fredoka",sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle';
+      function chip(label, x, y) {
+        var twid = c.measureText(label).width + 16;
+        c.fillStyle = 'rgba(60,35,10,.55)'; rr(c, x - twid / 2, y - 8, twid, 16, 8); c.fill();
+        c.fillStyle = 'rgba(255,248,230,.95)'; c.fillText(label, x, y);
+      }
+      chip('SEA  ·  raiders land here', W / 2, H - 14);
+      c.restore();
+    }
   };
   function rr_fn(c, x, y, w, h, r) { rr(c, x, y, w, h, r); }
 

@@ -132,17 +132,73 @@
     D.DECOS.forEach(function (d) {
       html += '<button class="v-item' + (vTool === d.id ? ' on' : '') + '" data-tool="' + d.id + '"><canvas width="72" height="72" data-deco="' + d.id + '"></canvas>' + d.name + '<br>' + d.cost + ' ' + d.cur + '</button>';
     });
-    $('#v-tray').innerHTML = html;
-    $$('#v-tray [data-vb]').forEach(function (c) { R.drawBuilding(c.getContext('2d'), D.BUILD[c.getAttribute('data-vb')].k, 36, 44, 56, 48, 0.4); });
-    $$('#v-tray [data-deco]').forEach(function (c) { R.drawDeco(c.getContext('2d'), c.getAttribute('data-deco'), 36, 40, 64); });
+    $('#v-tray').innerHTML = html; vCv._artTray = 0;
+    $$('#v-tray [data-vb]').forEach(function (c) {
+      var x = c.getContext('2d'), k = D.BUILD[c.getAttribute('data-vb')].k;
+      x.clearRect(0, 0, 72, 72);
+      if (!R.drawArt(x, k, 36, 66, 48, 0.4, {})) R.drawBuilding(x, k, 36, 44, 56, 48, 0.4);
+    });
+    $$('#v-tray [data-deco]').forEach(function (c) {
+      var x = c.getContext('2d'), id = c.getAttribute('data-deco');
+      x.clearRect(0, 0, 72, 72);
+      if (!R.drawArt(x, id, 36, 66, 50, 0.4, {})) R.drawDeco(x, id, 36, 40, 64);
+    });
     $$('#v-tray [data-tool]').forEach(function (b) {
       b.onclick = function () { vTool = vTool === b.getAttribute('data-tool') ? null : b.getAttribute('data-tool'); vMoveFrom = null; buildVillage(); };
     });
     $('#v-hint').textContent = vMoveFrom ? 'Tap an empty plot to move it.' : vTool ? 'Tap an empty plot to place it.' : 'Tap a plot to build, or tap a building to upgrade, move or sell.';
     updateWallet();
   }
+  var vCam = { x: 0, y: 0, z: 1 }, vDrag = null, vPtrs = {}, vPinch = null;
+  function vClampCam() {
+    var lim = 140;
+    vCam.z = Math.max(0.85, Math.min(1.85, vCam.z));
+    vCam.x = Math.max(-lim, Math.min(lim, vCam.x));
+    vCam.y = Math.max(-lim, Math.min(lim, vCam.y));
+  }
   vCv.addEventListener('pointerdown', function (e) {
     if (screen !== 'village') return;
+    try { vCv.setPointerCapture(e.pointerId); } catch (err) {}
+    vPtrs[e.pointerId] = { x: e.clientX, y: e.clientY };
+    var ids = Object.keys(vPtrs);
+    if (ids.length >= 2) {
+      var a = vPtrs[ids[0]], b = vPtrs[ids[1]];
+      var dx = a.x - b.x, dy = a.y - b.y;
+      vPinch = { d: Math.sqrt(dx * dx + dy * dy) || 1, z: vCam.z };
+      vDrag = null;
+      return;
+    }
+    vDrag = { x: e.clientX, y: e.clientY, cx: vCam.x, cy: vCam.y, moved: false };
+  });
+  vCv.addEventListener('pointermove', function (e) {
+    if (screen !== 'village') return;
+    if (vPtrs[e.pointerId]) vPtrs[e.pointerId] = { x: e.clientX, y: e.clientY };
+    var ids = Object.keys(vPtrs);
+    if (vPinch && ids.length >= 2) {
+      var a = vPtrs[ids[0]], b = vPtrs[ids[1]];
+      var d = Math.sqrt((a.x - b.x) * (a.x - b.x) + (a.y - b.y) * (a.y - b.y)) || 1;
+      vCam.z = vPinch.z * (d / vPinch.d); vClampCam();
+      return;
+    }
+    if (vDrag) {
+      var dx = e.clientX - vDrag.x, dy = e.clientY - vDrag.y;
+      if (Math.abs(dx) + Math.abs(dy) > 10) vDrag.moved = true;
+      if (vDrag.moved) { vCam.x = vDrag.cx + dx / vCam.z; vCam.y = vDrag.cy + dy / vCam.z; vClampCam(); }
+    }
+  });
+  vCv.addEventListener('pointercancel', function (e) { delete vPtrs[e.pointerId]; vDrag = null; vPinch = null; });
+  vCv.addEventListener('wheel', function (e) {
+    if (screen !== 'village') return;
+    e.preventDefault();
+    vCam.z *= e.deltaY > 0 ? 0.92 : 1.08; vClampCam();
+  }, { passive: false });
+  vCv.addEventListener('pointerup', function (e) {
+    if (screen !== 'village') return;
+    var doTap = vDrag && !vDrag.moved && !vPinch;
+    delete vPtrs[e.pointerId];
+    if (Object.keys(vPtrs).length < 2) vPinch = null;
+    if (Object.keys(vPtrs).length === 0) vDrag = null;
+    if (!doTap) return;
     var rect = vCv.getBoundingClientRect();
     var cell = R.villageCellAt(e.clientX - rect.left, e.clientY - rect.top);
     if (!cell) return;
@@ -178,20 +234,9 @@
     return h ? h + 'h ' + m + 'm' : m + 'm';
   }
   function miniVillage(cv, grid) {
-    var x = cv.getContext('2d'), W = cv.width, H = cv.height;
-    x.fillStyle = '#8ED8F0'; x.fillRect(0, 0, W, H);
-    x.fillStyle = '#22B8E0'; x.fillRect(0, 0, W, H * 0.22);
-    x.fillStyle = '#F3D7A0'; x.fillRect(0, H * 0.2, W, H);
-    var tw = W / 7, th = H * 0.72 / 4, oy = H * 0.26;
-    for (var r = 0; r < 4; r++) {
-      var rr = 3 - r;
-      for (var c = 0; c < 7; c++) {
-        var cell = grid[r] && grid[r][c], cx = (c + 0.5) * tw, cy = oy + (rr + 0.55) * th;
-        if (!cell) continue;
-        if (cell.deco) R.drawDeco(x, cell.id, cx, cy, tw * 0.8);
-        else R.drawBuilding(x, D.BUILD[cell.code].k, cx, cy, tw * 0.86, th * 0.9, 0, {});
-      }
-    }
+    var x = cv.getContext('2d');
+    x.clearRect(0, 0, cv.width, cv.height);
+    R.drawVillage(x, grid, { W: cv.width, H: cv.height, t: 0.4, mini: true });
   }
   function buildRaid() {
     var now = Date.now();
@@ -685,7 +730,18 @@
         var sz = vResize();
         if (sz) {
           bctx.setTransform(sz.d, 0, 0, sz.d, 0, 0);
-          R.drawVillage(bctx, save.village.grid, { W: sz.w, H: sz.h, t: T, sel: vSel, skin: save.cosmetics.skin || 'default' });
+          R.drawVillage(bctx, save.village.grid, { W: sz.w, H: sz.h, t: T, sel: vSel, skin: save.cosmetics.skin || 'default', cam: vCam, placing: !!(vTool || vMoveFrom), moveFrom: vMoveFrom });
+          if (R.hasArt('flag') && !vCv._artTray) {
+            vCv._artTray = 1;
+            $$('#v-tray [data-vb]').forEach(function (c) {
+              var x = c.getContext('2d'), k = D.BUILD[c.getAttribute('data-vb')].k;
+              x.clearRect(0, 0, 72, 72); R.drawArt(x, k, 36, 66, 48, 0.4, {});
+            });
+            $$('#v-tray [data-deco]').forEach(function (c) {
+              var x = c.getContext('2d'), id = c.getAttribute('data-deco');
+              x.clearRect(0, 0, 72, 72); R.drawArt(x, id, 36, 66, 50, 0.4, {});
+            });
+          }
         }
       }
     }

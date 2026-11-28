@@ -1,1 +1,1 @@
-kite-clash web build v0.1.0 (prototype) - static, no build step. Deploy: copy this folder to jonidge.com/play/gust-rally/
+gust-rally web build v0.1.0 (M1) - static, no build step. Deploy: copy this folder (www/) to jonidge.com/play/gust-rally/

@@ -4,8 +4,7 @@
   'use strict';
   var NAMES = ['wind', 'music', 'gust', 'updraft', 'ring', 'hit', 'zap', 'skid', 'count', 'go', 'finish', 'click', 'best'];
   var ctx = null, bufs = {}, master, sfxGain, musicGain, windSrc = null, windGain = null, musicSrc = null, loading = null;
-  var muted = false;
-  try { muted = localStorage.getItem('gustrally:mute') === '1'; } catch (e) {}
+  var sfxOn = true, musicOn = true;
   var ext = (function () { var a = document.createElement('audio'); return a.canPlayType && a.canPlayType('audio/ogg; codecs="vorbis"') ? 'ogg' : 'mp3'; })();
   function load() {
     if (loading) return loading;
@@ -20,9 +19,9 @@
     unlock: function () {
       if (!ctx) {
         var AC = root.AudioContext || root.webkitAudioContext; if (!AC) return;
-        ctx = new AC(); master = ctx.createGain(); master.gain.value = muted ? 0 : 1; master.connect(ctx.destination);
-        sfxGain = ctx.createGain(); sfxGain.gain.value = 0.8; sfxGain.connect(master);
-        musicGain = ctx.createGain(); musicGain.gain.value = 0.32; musicGain.connect(master);
+        ctx = new AC(); master = ctx.createGain(); master.gain.value = 1; master.connect(ctx.destination);
+        sfxGain = ctx.createGain(); sfxGain.gain.value = sfxOn ? 0.8 : 0; sfxGain.connect(master);
+        musicGain = ctx.createGain(); musicGain.gain.value = musicOn ? 0.32 : 0; musicGain.connect(master);
         load().then(function () { Sfx.music(true); });
       }
       if (ctx.state === 'suspended') ctx.resume();
@@ -43,8 +42,8 @@
       if (!on && windSrc) { windSrc.stop(); windSrc = null; return; }
       if (windSrc) { var t = ctx.currentTime; windGain.gain.setTargetAtTime(0.15 + 0.6 * speed01, t, 0.08); windSrc.playbackRate.setTargetAtTime(0.75 + 0.7 * speed01, t, 0.1); }
     },
-    setMuted: function (m) { muted = m; try { localStorage.setItem('gustrally:mute', m ? '1' : '0'); } catch (e) {} if (master) master.gain.value = m ? 0 : 1; },
-    isMuted: function () { return muted; },
+    /** Independent sound-effect and music switches (settings screen). */
+    configure: function (sfx, music) { sfxOn = !!sfx; musicOn = !!music; if (sfxGain) sfxGain.gain.value = sfxOn ? 0.8 : 0; if (musicGain) musicGain.gain.value = musicOn ? 0.32 : 0; },
     status: function () { return { ctx: ctx ? ctx.state : 'none', loaded: Object.keys(bufs).length, music: !!musicSrc }; }
   };
   root.Sfx = Sfx;

@@ -19,7 +19,9 @@
     this.tail = []; for (var i = 0; i < 14; i++) this.tail.push({ x: -10 * i, y: 430, px: -10 * i, py: 430 });
     this.camX = -200; this.camY = 0;
     for (var k = 0; k < 70; k++) this.streaks.push(this._newStreak(true));
-    this.reduced = root.matchMedia && root.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    var rm = opts.reduced; if (rm == null) rm = root.matchMedia && root.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    this.reduced = !!rm; this.haptics = opts.haptics !== false;
+    this.zoomW = 900;
     var noop = { play: function () {}, wind: function () {} };
     this._sfx = opts.silent || !root.Sfx ? noop : root.Sfx;
     this.resize();
@@ -28,8 +30,15 @@
   Game.prototype.resize = function () {
     var dpr = Math.min(root.devicePixelRatio || 1, 2), r = this.c.getBoundingClientRect();
     this.c.width = Math.round(r.width * dpr); this.c.height = Math.round(r.height * dpr);
-    this.scale = this.c.height / W.H; this.viewW = this.c.width / this.scale;
-    this._skyGrad = null;
+    this._skyGrad = null; this._layout();
+  };
+
+  /* Look-ahead: the visible width follows airspeed so you always see about 2 s of course ahead of the kite
+   * (portrait phones are narrow, so the world is zoomed out; extra sky/ground above and below is just scenery). */
+  Game.prototype._layout = function () {
+    var vw = this.zoomW, cw = this.c.width, ch = this.c.height;
+    this.scale = Math.min(cw / vw, ch / (W.H + 40));
+    this.viewW = cw / this.scale; this.viewH = ch / this.scale; this.oy = Math.max(0, (this.viewH - W.H) / 2);
   };
 
   Game.prototype._newStreak = function (anywhere) {
@@ -71,8 +80,9 @@
       }
     }
     // camera: kite sits ~28% from left, leads with speed
-    var lead = 0.26 + (s.vx - 300) / 4000;
-    var tx = s.x - this.viewW * lead;
+    var wantW = S.clamp(2.9 * s.vx, 760, 1500);
+    this.zoomW = lerp(this.zoomW, wantW, 1 - Math.pow(0.05, dt)); this._layout();
+    var tx = s.x - this.viewW * 0.25;
     this.camX = this.countdown > 0 ? tx : lerp(this.camX, tx, 1 - Math.pow(0.0001, dt));
     this.shake = Math.max(0, this.shake - dt * 30);
     this.flash = Math.max(0, this.flash - dt * 3);
@@ -86,15 +96,15 @@
       var e = ev[i];
       if (e.e === 'ring') { this._burst(e.x, e.y, 14, ['#FFD166', '#FFF3B0', '#FFFFFF'], 260, 0.5); this._sfx.play('ring', 0.7, 1 + (s.rings % 5) * 0.06); }
       else if (e.e === 'hit') {
-        this.shake = this.reduced ? 3 : 14; this.hitStop = 0.07; this.flash = e.kind === 'zap' ? 1 : 0.5;
+        this.shake = this.reduced ? 0 : 14; this.hitStop = this.reduced ? 0 : 0.07; this.flash = this.reduced ? 0 : (e.kind === 'zap' ? 1 : 0.5);
         this._burst(s.x, s.y, e.kind === 'bird' ? 16 : 22, e.kind === 'bird' ? ['#FFFFFF', '#D8E2F0', '#9AA8BC'] : ['#FFF59D', '#FFFFFF', '#B39DDB'], 340, 0.8, e.kind === 'bird' ? 'feather' : 'spark');
         this._sfx.play(e.kind === 'zap' || e.kind === 'storm' ? 'zap' : 'hit', 0.9);
-        if (navigator.vibrate) try { navigator.vibrate(40); } catch (er) {}
+        if (this.haptics) this.opts.onHaptic && this.opts.onHaptic('hit');
       }
       else if (e.e === 'gust') this._sfx.play('gust', 0.6);
       else if (e.e === 'head') this._sfx.play('gust', 0.45, 0.7);
       else if (e.e === 'updraft') this._sfx.play('updraft', 0.55);
-      else if (e.e === 'skid') { this._sfx.play('skid', 0.5); this.shake = Math.max(this.shake, 4); this._burst(s.x, W.GROUND + 10, 8, ['#7CC77F', '#A8E6A1'], 160, 0.5); }
+      else if (e.e === 'skid') { this._sfx.play('skid', 0.5); if (!this.reduced) this.shake = Math.max(this.shake, 4); this._burst(s.x, W.GROUND + 10, 8, ['#7CC77F', '#A8E6A1'], 160, 0.5); }
     }
     ev.length = 0;
   };
@@ -105,7 +115,7 @@
     for (var i = 0; i < 60; i++) this._burst(this.course.length + 40, 150 + Math.random() * 600, 1, ['#FF5D73', '#FFD166', '#06D6A0', '#4CC9F0', '#B388FF'], 420, 1.6, 'confetti');
     this._sfx.play('finish', 0.9);
     var self = this;
-    setTimeout(function () { self.opts.onFinish && self.opts.onFinish({ time: s.finishT, rings: s.rings, hits: s.hits, ghost: g }); }, 1100);
+    setTimeout(function () { self.opts.onFinish && self.opts.onFinish({ time: s.finishT, rings: s.rings, hits: s.hits, birdHits: s.birdHits, ups: s.ups, ghost: g }); }, 1100);
   };
 
   Game.prototype._burst = function (x, y, n, cols, sp, life, kind) {
@@ -138,7 +148,7 @@
       B.x -= dx * k; B.y -= dy * k;
     }
     // wind streaks (screen space, flow faster than the scenery)
-    var speed = (s.vx + 250) / this.viewW;
+    var speed = (s.vx + 250) / this.viewW * (this.reduced ? 0.6 : 1);
     for (i = 0; i < this.streaks.length; i++) {
       var st = this.streaks[i]; st.x -= speed * st.sp * dt * (s.inGust > 0 ? 1.8 : 1);
       if (st.x < -0.2) this.streaks[i] = this._newStreak(false);
@@ -153,16 +163,16 @@
     if (!this._skyGrad) { var gr = g.createLinearGradient(0, 0, 0, this.c.height); gr.addColorStop(0, th.sky[0]); gr.addColorStop(0.6, th.sky[1]); gr.addColorStop(1, th.sky[2]); this._skyGrad = gr; }
     g.fillStyle = this._skyGrad; g.fillRect(0, 0, this.c.width, this.c.height);
     var shx = this.shake ? (Math.random() - 0.5) * this.shake : 0, shy = this.shake ? (Math.random() - 0.5) * this.shake : 0;
-    g.setTransform(sc, 0, 0, sc, shx * sc, shy * sc);
+    g.setTransform(sc, 0, 0, sc, shx * sc, (shy + this.oy) * sc);
     var cx = this.camX;
     // sun
     g.fillStyle = th.sun; g.globalAlpha = 0.9; g.beginPath(); g.arc(VW * 0.78, 150, 70, 0, TAU); g.fill();
     g.globalAlpha = 0.25; g.beginPath(); g.arc(VW * 0.78, 150, 110, 0, TAU); g.fill(); g.globalAlpha = 1;
     // far clouds (parallax 0.15)
-    this._clouds(cx * 0.15, 0.55, 120, 360, 520, 0.8);
+    this._clouds(cx * 0.15, 0.55, 120 - this.oy, 360, 520, 0.8);
     // hills
     this._hills(cx * 0.25, th.hill[0], 640, 90, 0.0021, 0.5);
-    this._clouds(cx * 0.35, 0.9, 200, 420, 700, 0.95);
+    this._clouds(cx * 0.35, 0.9, 200 - this.oy, 420, 700, 0.95);
     this._hills(cx * 0.5, th.hill[1], 720, 60, 0.0034, 1.7);
     this._ground(cx);
     // world layer
@@ -179,11 +189,11 @@
     }
     // kite string to the flyer far below-left
     var ang = this.countdown > 0 ? -0.15 : Math.atan2(s.vy, s.vx) * 0.6;
-    g.strokeStyle = 'rgba(255,255,255,0.55)'; g.lineWidth = 1.5; g.beginPath(); g.moveTo(s.x, s.y + 6); g.quadraticCurveTo(s.x - 160, s.y + 220, s.x - 420, W.H + 40); g.stroke();
+    g.strokeStyle = 'rgba(255,255,255,0.55)'; g.lineWidth = 1.5; g.beginPath(); g.moveTo(s.x, s.y + 6); g.quadraticCurveTo(s.x - 160, s.y + 220, s.x - 420, W.H + this.oy + 60); g.stroke();
     // trail ribbon
     for (var i = 1; i < this.trail.length; i++) {
       var a = this.trail[i - 1], b = this.trail[i], t = i / this.trail.length;
-      g.strokeStyle = 'rgba(255,255,255,' + (t * 0.55).toFixed(3) + ')'; g.lineWidth = 2 + t * 9; g.lineCap = 'round';
+      g.strokeStyle = 'rgba(255,255,255,' + (t * 0.55).toFixed(3) + ')'; g.lineWidth = 3 + t * 14; g.lineCap = 'round';
       g.beginPath(); g.moveTo(a.x - 22, a.y + 6); g.lineTo(b.x - 22, b.y + 6); g.stroke();
     }
     // tail
@@ -205,9 +215,9 @@
     g.strokeStyle = '#FFFFFF'; g.lineCap = 'round';
     var spd = S.clamp((s.vx - 200) / 500, 0, 1);
     for (i = 0; i < this.streaks.length; i++) {
-      var st = this.streaks[i]; g.globalAlpha = st.a * (0.4 + spd); g.lineWidth = 2;
+      var st = this.streaks[i]; g.globalAlpha = st.a * (0.4 + spd) * (this.reduced ? 0.5 : 1); g.lineWidth = 3;
       var len = st.len * (0.6 + spd * 1.4) * (s.inGust > 0 ? 1.6 : 1);
-      g.beginPath(); g.moveTo(st.x * VW, st.y * W.H); g.lineTo(st.x * VW + len, st.y * W.H); g.stroke();
+      var sy2 = st.y * this.viewH - this.oy; g.beginPath(); g.moveTo(st.x * VW, sy2); g.lineTo(st.x * VW + len, sy2); g.stroke();
     }
     g.globalAlpha = 1;
     // flash
@@ -226,13 +236,28 @@
     g.globalAlpha = 1;
   };
   Game.prototype._hills = function (off, col, base, amp, freq, ph) {
-    var g = this.g, VW = this.viewW; g.fillStyle = col; g.beginPath(); g.moveTo(0, W.H);
+    var g = this.g, VW = this.viewW; g.fillStyle = col; g.beginPath(); g.moveTo(0, W.H + this.oy + 20);
     for (var x = 0; x <= VW + 20; x += 20) { var wx = x + off; g.lineTo(x, base - amp * (0.6 * Math.sin(wx * freq + ph) + 0.4 * Math.sin(wx * freq * 2.3 + ph * 2))); }
-    g.lineTo(VW + 20, W.H); g.closePath(); g.fill();
+    g.lineTo(VW + 20, W.H + this.oy + 20); g.closePath(); g.fill();
   };
   Game.prototype._ground = function (cx) {
     var g = this.g, VW = this.viewW, th = this.course.theme, gy = W.GROUND + 18;
-    g.fillStyle = th.hill[2]; g.fillRect(0, gy, VW, W.H - gy);
+    g.fillStyle = th.hill[2]; g.fillRect(0, gy, VW, W.H - gy + this.oy + 20);
+    // meadow depth: dark soil bands, trees, flower patches and fence posts at different parallax speeds (fills the zoomed-out portrait view)
+    var bottom = W.H + this.oy + 20, row, k0, k;
+    for (row = 0; row < 3; row++) {
+      var par = 0.55 + row * 0.2, base = gy + 70 + row * 130, sp = 170 - row * 30, sz = 0.8 + row * 0.35;
+      g.fillStyle = row === 1 ? th.hill[1] : th.hill[0]; g.globalAlpha = 0.5; g.fillRect(0, base + 36 * sz, VW, 6 * sz); g.globalAlpha = 1;
+      k0 = Math.floor(cx * par / sp);
+      for (k = k0 - 1; k < k0 + VW / sp + 2; k++) {
+        var tx = k * sp - cx * par + hash01(k + row * 31) * sp * 0.7, ty = base, hh = 1 + hash01(k + 17 + row) * 0.6;
+        if (ty > bottom) continue;
+        var kind = hash01(k * 3 + row);
+        if (kind < 0.5) { g.fillStyle = '#8B6B4A'; g.fillRect(tx - 4 * sz, ty - 10 * sz * hh, 8 * sz, 46 * sz * hh); g.fillStyle = row === 1 ? '#4FA36F' : '#5FB87F'; g.beginPath(); g.arc(tx, ty - 22 * sz * hh, 26 * sz * hh, 0, TAU); g.arc(tx - 18 * sz, ty - 8 * sz * hh, 18 * sz * hh, 0, TAU); g.arc(tx + 18 * sz, ty - 8 * sz * hh, 18 * sz * hh, 0, TAU); g.fill(); }
+        else if (kind < 0.8) { for (var f = 0; f < 5; f++) { g.fillStyle = ['#FFD166', '#FFFFFF', '#FF8FA3'][f % 3]; g.beginPath(); g.arc(tx + (f - 2) * 11 * sz, ty + 20 * sz + (f % 2) * 6 * sz, 4.5 * sz, 0, TAU); g.fill(); } }
+        else { g.fillStyle = 'rgba(255,255,255,0.8)'; for (var fp = 0; fp < 4; fp++) g.fillRect(tx + fp * 18 * sz, ty + 4 * sz, 5 * sz, 34 * sz); g.fillRect(tx, ty + 14 * sz, 54 * sz, 4 * sz); }
+      }
+    }
     g.strokeStyle = th.hill[1]; g.lineWidth = 3; g.lineCap = 'round';
     var sway = Math.sin(this.time * 3) * 4 + (this.s.vx - 300) / 60;
     for (var k = Math.floor(cx / 26); k < (cx + VW) / 26 + 1; k++) {
@@ -311,7 +336,7 @@
   };
 
   Game.prototype._kiteShape = function (x, y, ang, col, sz) {
-    var g = this.g, w = 26 * sz, h = 34 * sz;
+    var g = this.g, w = 26 * sz * 1.5, h = 34 * sz * 1.5;
     g.save(); g.translate(x, y); g.rotate(ang + 0.25);
     g.fillStyle = col.a; g.beginPath(); g.moveTo(0, -h); g.lineTo(w, -h * 0.2); g.lineTo(0, 0); g.closePath(); g.fill();
     g.beginPath(); g.moveTo(0, h); g.lineTo(-w, -h * 0.2); g.lineTo(0, 0); g.closePath(); g.fill();
@@ -355,7 +380,7 @@
     for (var i = s.cursor; i < F.length; i++) {
       var f = F[i]; if (f.x0 > edge + 500) break;
       if ((f.type === 'bird' || f.type === 'storm') && f.x > edge && f.x < edge + 500) {
-        var yy = f.type === 'bird' ? S.birdPos(f, s.t).y : f.y, sy = yy * sc / d, a = 1 - (f.x - edge) / 500;
+        var yy = f.type === 'bird' ? S.birdPos(f, s.t).y : f.y, sy = (yy + this.oy) * sc / d, a = 1 - (f.x - edge) / 500;
         g.globalAlpha = 0.35 + 0.65 * a; g.fillStyle = f.type === 'bird' ? '#FF5D73' : '#5D6491';
         g.beginPath(); g.moveTo(w - 6, sy); g.lineTo(w - 22, sy - 10); g.lineTo(w - 22, sy + 10); g.closePath(); g.fill(); g.globalAlpha = 1;
       }

@@ -119,7 +119,7 @@
 
   // ---------- physics ----------
   function newState() {
-    return { tick: 0, t: 0, x: 0, y: 430, vx: P.CRUISE, vy: 0, hold: false, invuln: 0, finished: false, finishT: 0,
+    return { tick: 0, t: 0, x: 0, y: 430, vx: P.CRUISE, vy: 0, hold: false, lift: 0, invuln: 0, ups: 0, birdHits: 0, finished: false, finishT: 0,
       taken: {}, hits: 0, rings: 0, inGust: 0, inUp: false, events: [], cursor: 0 };
   }
 
@@ -135,7 +135,7 @@
   function hit(s, kind) {
     if (s.invuln > 0) return;
     s.vx = Math.max(P.VMIN, s.vx * P.HIT_KEEP); s.vy = kind === 'zap' ? 260 : -120;
-    s.invuln = P.INVULN; s.hits++;
+    s.invuln = P.INVULN; s.hits++; if (kind === 'bird') s.birdHits++;
     s.events.push({ e: 'hit', kind: kind });
   }
 
@@ -143,7 +143,9 @@
     if (s.finished) return s;
     var dt = DT;
     if (hold !== s.hold) { s.hold = hold; }
-    var lift = hold ? P.LIFT * clamp(s.vx / 380, 0.55, 1.3) : 0;
+    // lift eases in/out (about 70 ms up, 110 ms down) so the kite feels like it has sail, not a switch
+    s.lift += ((hold ? 1 : 0) - s.lift) * (1 - Math.exp(-(hold ? 16 : 10) * dt));
+    var lift = s.lift * P.LIFT * clamp(s.vx / 380, 0.55, 1.3);
     var ay = P.G - lift;
     var ax = (P.CRUISE - s.vx) * P.RELAX;
     // wind features
@@ -170,7 +172,7 @@
       }
     }
     if (gust !== s.inGust) { if (gust) s.events.push({ e: gust > 0 ? 'gust' : 'head' }); s.inGust = gust; }
-    if (up && !s.inUp) s.events.push({ e: 'updraft' });
+    if (up && !s.inUp) { s.ups++; s.events.push({ e: 'updraft' }); }
     s.inUp = up;
     // integrate
     s.vy += ay * dt; s.vy -= s.vy * P.VDRAG * dt; s.vy = clamp(s.vy, -P.VYMAX, P.VYMAX);

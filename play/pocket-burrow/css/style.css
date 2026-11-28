@@ -32,6 +32,10 @@ html,body{margin:0;height:100%;background:#2b1f18;color:var(--ink);font-family:"
 /* hint + fab + toast */
 .hint{position:absolute;left:12px;right:12px;bottom:calc(var(--safe-b) + 84px);z-index:6;padding:10px 14px;border-radius:16px;background:#fff8ea;border:2px solid #e2b85a;box-shadow:var(--shadow);font-size:15px;line-height:1.25;animation:rise .4s ease}
 @keyframes rise{from{transform:translateY(12px);opacity:0}}
+.hint.soft{right:auto;max-width:64%;bottom:calc(var(--safe-b) + 92px);padding:7px 12px;font-size:13px;border-width:1.5px;border-radius:14px;background:rgba(255,248,234,.95);cursor:pointer;color:var(--ink2)}
+.hint.soft b{color:var(--ink)}
+.row.up{font-size:14px;padding:3px 0;gap:10px}.row.up.rare{color:#7a4fb0}.row.up b{white-space:nowrap}
+.acard .sub{font-size:10px;color:var(--ink2);margin-top:-2px;padding:0 2px 5px;text-align:center;line-height:1.1}
 .fab{position:absolute;right:12px;bottom:calc(var(--safe-b) + 96px);z-index:6;border:0;border-radius:999px;padding:11px 16px;background:linear-gradient(#ffd462,#f2a93a);color:#5a3410;font:700 16px "Fredoka",sans-serif;box-shadow:0 4px 0 #b97a1c,0 8px 16px rgba(60,35,15,.3);cursor:pointer;animation:pulse 2.4s infinite}
 .fab:active{transform:translateY(3px);box-shadow:0 1px 0 #b97a1c}
 #toasts{position:absolute;left:0;right:0;top:calc(var(--safe-t) + 52px);z-index:20;display:flex;flex-direction:column;align-items:center;gap:6px;pointer-events:none}

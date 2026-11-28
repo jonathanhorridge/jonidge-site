@@ -136,6 +136,25 @@
   // ---------- gifts & away ----------
   var GIFTS = { everyHours: 8, acornHours: 1, berryChance: { common: 0.02, uncommon: 0.04, rare: 0.1, legendary: 0.2 } };
 
+  // ---------- friendship: every gift a resident hands over is a heart; hearts unlock story lines and a small thank-you ----------
+  var FRIENDSHIP = {
+    hearts: [3, 8, 15],                                           // gifts needed for friendship level 1, 2, 3
+    rewards: [ { acornHours: 2 }, { acornHours: 3, berries: 1 }, { acornHours: 5, berries: 1 } ],
+    names: ['New friend', 'Friend', 'Close friend', 'Best friend']
+  };
+  var STORIES = {   // {n} = the critter's name; one line per friendship level (1 to 3)
+    farm:   ['{n} whispers that the mushrooms grow faster when you tell them a secret.', '{n} has named every single mushroom. Even the shy ones.', '{n} says this is the first place that ever felt like a proper home.'],
+    bakery: ['{n} saves the crispiest crust for you. Do not tell the others.', '{n} dreams of a bread so soft it hums when you hold it.', '{n} just baked a tiny loaf shaped like your burrow door.'],
+    library:['{n} has been reading the same page for three days and refuses to be rushed.', '{n} found a book with a map to your own burrow. How curious.', '{n} is writing a story about you. The first chapter is mostly snacks.'],
+    spring: ['{n} says warm water is just a hug you can sit in.', '{n} floats on their back and counts the steam clouds.', '{n} confesses that the best part of the spring is who sits next to them.'],
+    tea:    ['{n} says every cup is a tiny, patient holiday.', '{n} has mixed a tea that tastes exactly like a rainy Sunday.', '{n} saved you the seat by the window, forever.'],
+    honey:  ['{n} hums a tune only the honey can hear.', '{n} says sweetness is just kindness that stayed a while.', '{n} gave the jar your name. It is the best jar.'],
+    yarn:   ['{n} is knitting a scarf long enough for the whole burrow.', '{n} says every knot is a promise, and the tangles are surprises.', '{n} made you a hat. It is slightly too big. It is perfect.'],
+    glow:   ['{n} thinks the glowing stones are sleepy stars.', '{n} can tell your mood from how the cave shimmers.', '{n} left a tiny light by your door so you never walk in the dark.'],
+    music:  ['{n} tunes the hollow every morning, just a little.', '{n} says the burrow has a key: it hums in warm, sleepy C.', '{n} wrote you a lullaby. It has no ending, so it never stops.'],
+    loft:   ['{n} knows all the stars by their first names.', '{n} says the sky is a blanket and you are tucked in.', '{n} named a new star after your burrow. It is rather bright.']
+  };
+
   // ---------- daily calendar (visit days, never resets) ----------
   var DAILY = [
     { acorns: 40 }, { goods: 10 }, { acorns: 80 }, { berries: 1 }, { acorns: 150 }, { goods: 25 }, { berries: 3, label: 'Weekly treat' }
@@ -179,7 +198,7 @@
     HOUR: HOUR, GOODS: GOODS, ROOMS: ROOMS, ROOM_BY_ID: ROOM_BY_ID, ROOM_LEVELS: ROOM_LEVELS, FARM_UPGRADE_BASE: FARM_UPGRADE_BASE,
     RARITY: RARITY, CRITTERS: CRITTERS, CRITTER_BY_ID: CRITTER_BY_ID,
     GRID: GRID, stratumForRow: stratumForRow, DIG: DIG, digCost: digCost, digSeconds: digSeconds,
-    COZY: COZY, VISITORS: VISITORS, GIFTS: GIFTS, DAILY: DAILY, ALBUM_REWARDS: ALBUM_REWARDS, ADS: ADS, DECOR: DECOR, seasonOf: seasonOf, PRODUCTS: PRODUCTS,
+    COZY: COZY, VISITORS: VISITORS, GIFTS: GIFTS, FRIENDSHIP: FRIENDSHIP, STORIES: STORIES, DAILY: DAILY, ALBUM_REWARDS: ALBUM_REWARDS, ADS: ADS, DECOR: DECOR, seasonOf: seasonOf, PRODUCTS: PRODUCTS,
     START: { acorns: 120, berries: 3 }
   };
 });

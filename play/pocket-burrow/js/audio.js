@@ -35,7 +35,7 @@
     /** 0..1 how night-like the surface is: crossfades the quiet night ambience */
     setNight: function (n) { Audio._night = n; Audio._apply(); },
     _apply: function () {
-      if (!ctx) return; musG.gain.setTargetAtTime(musOn ? .36 : 0, ctx.currentTime, .3);
+      if (!ctx) return; musG.gain.setTargetAtTime(musOn ? .5 : 0, ctx.currentTime, .3);
       if (bgm) bgm.gain.gain.setTargetAtTime(1 - .55 * (Audio._night || 0), ctx.currentTime, 1);
       if (night) night.gain.gain.setTargetAtTime(.9 * (Audio._night || 0), ctx.currentTime, 1);
     },

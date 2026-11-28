@@ -6,7 +6,7 @@
   var N = root.PocketNative || null, NATIVE = !!(N && N.isNative);
   var Ads = {
     native: NATIVE,
-    simulated: !NATIVE,
+    simulated: !(NATIVE && N.AdMob && N.AdMob.showRewarded),   // stays simulated until the owner approves the AdMob setup
     /** resolves true if the player earned the reward. ui(cb) is the simulated "test ad" screen used in the browser. */
     showRewarded: function (kind, ui) {
       if (NATIVE && N.AdMob && N.AdMob.showRewarded) return N.AdMob.showRewarded(kind).then(function (r) { return !!r; }).catch(function () { return false; });
@@ -14,7 +14,7 @@
     }
   };
   var IAP = {
-    native: NATIVE, simulated: !NATIVE,
+    native: NATIVE, simulated: !(NATIVE && N.Purchases && N.Purchases.buy),
     buy: function (sku, ui) {
       if (NATIVE && N.Purchases && N.Purchases.buy) return N.Purchases.buy(sku).then(function (r) { return !!r; }).catch(function () { return false; });
       return new Promise(function (res) { if (ui) ui(res); else res(true); });

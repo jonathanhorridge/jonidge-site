@@ -28,12 +28,13 @@
   function drawCritter(c, look, st) {
     var t = st.t, seed = st.seed || 0, dir = st.dir || 1, walk = st.walk || 0, hop = st.hop || 0;
     var sc = (look.big || 1) * (st.scale || 1);
-    var bob = sin(t * (walk ? 11 : 2.2) + seed) * (walk ? 1.4 : .9);
-    var squash = 1 + sin(t * 2.2 + seed) * .025;
+    var slp = !!st.sleep;
+    var bob = sin(t * (walk ? 11 : slp ? 1.1 : 2.2) + seed) * (walk ? 1.4 : slp ? .5 : .9);
+    var squash = 1 + sin(t * (slp ? 1.1 : 2.2) + seed) * (slp ? .04 : .025);
     c.save(); c.translate(st.x || 0, (st.y || 0) - hop); c.scale(dir * sc, sc);
     // soft shadow
     c.fillStyle = 'rgba(40,20,10,.22)'; ell(c, 0, 0, 12 * (1 - hop / 40), 3); c.fill();
-    var blink = (t * .8 + seed * 1.7) % 4.6 > 4.45;
+    var blink = slp || (t * .8 + seed * 1.7) % 4.6 > 4.45;
     var fn = ARCH[look.arch] || ARCH.furry;
     fn(c, look, t, seed, walk, bob, squash, blink, st);
     c.restore();
@@ -447,6 +448,8 @@
     if (st.supporter) { star(c, dx, dy - 36, 5, 5, .5); c.fillStyle = '#ffd84a'; c.fill(); c.strokeStyle = '#a07a10'; c.lineWidth = .8; c.stroke(); }
     // seasonal particles
     drawSeasonParticles(c, W, GROUND, t, st.season, night);
+    drawSkyLife(c, W, GROUND, t, hour, st.season, night);
+    if (st.rareTease) drawRareTease(c, st.doorX, GROUND, t);
     // night tint
     if (night > .02) { c.fillStyle = 'rgba(14,18,60,' + night * .28 + ')'; c.fillRect(0, -200, W, GROUND + 200); }
   }
@@ -458,6 +461,33 @@
     c.fillStyle = 'rgba(255,255,255,.12)'; c.beginPath(); c.arc(x - 8 + sw, y - 94, 12, 0, TAU); c.fill();
     if (season === 'spring') { c.fillStyle = '#fff'; for (var i = 0; i < 12; i++) { c.beginPath(); c.arc(x + (hash(i) - .5) * 70 + sw, y - 66 + (hash(i + 3) - .5) * 60, 1.6, 0, TAU); c.fill(); } }
     if (season === 'autumn') { c.fillStyle = '#d9534f'; for (var j = 0; j < 8; j++) { c.beginPath(); c.arc(x + (hash(j + 8) - .5) * 64 + sw, y - 70 + (hash(j + 12) - .5) * 50, 2.4, 0, TAU); c.fill(); } }
+  }
+  /** little birds by day (fewer in winter), an occasional shooting star at night: ambient life, nothing to tap */
+  function drawSkyLife(c, W, G, t, hour, season, night) {
+    if (night < .35 && hour > 6 && hour < 19) {
+      var flocks = season === 'winter' ? 1 : 2;
+      for (var f = 0; f < flocks; f++) {
+        var per = 38 + f * 17, ph = ((t + f * 19) % per) / per, bx = -30 + ph * (W + 60), by = 34 + f * 26 + sin(ph * 9) * 6;
+        for (var k = 0; k < 3; k++) {
+          var x = bx - k * 13, y = by + (k % 2) * 7 + k * 2, fl = sin(t * 9 + k * 1.7 + f) * 3.2;
+          c.strokeStyle = 'rgba(70,50,40,.55)'; c.lineWidth = 1.3; c.lineCap = 'round'; c.beginPath(); c.moveTo(x - 5, y - fl * .6); c.quadraticCurveTo(x - 2, y - fl - 1, x, y); c.quadraticCurveTo(x + 2, y - fl - 1, x + 5, y - fl * .6); c.stroke();
+        }
+      }
+    }
+    if (night > .6) {
+      var per2 = 23, ph2 = (t % per2) / per2;
+      if (ph2 < .06) { var q = ph2 / .06, sx = W * .15 + q * W * .35, sy = 14 + q * 52; c.strokeStyle = 'rgba(255,248,210,' + (1 - q) * .9 + ')'; c.lineWidth = 1.6; c.lineCap = 'round'; c.beginPath(); c.moveTo(sx, sy); c.lineTo(sx - 22, sy - 14); c.stroke(); glow(c, sx, sy, 6, '#fff6d0', (1 - q) * .8); }
+    }
+  }
+  /** a lantern glowing by the burrow door with a small "?" shadow: a rare guest is due tonight */
+  function drawRareTease(c, doorX, G, t) {
+    var x = doorX + 96, y = G - 30 + sin(t * 1.6) * 2;
+    glow(c, x, y, 34, '#ffe9a0', .45 + .15 * sin(t * 3));
+    c.strokeStyle = '#5a3a2a'; c.lineWidth = 1.4; c.beginPath(); c.moveTo(x, y - 20); c.lineTo(x, y - 10); c.stroke();
+    rr(c, x - 5, y - 10, 10, 13, 4); fillStroke(c, '#ffd36a', '#a3601a', 1.2);
+    c.fillStyle = 'rgba(255,255,255,.7)'; ell(c, x - 1.5, y - 5, 1.4, 2.4); c.fill();
+    c.font = '700 13px Fredoka,sans-serif'; c.textAlign = 'center'; c.fillStyle = 'rgba(255,240,190,' + (.55 + .35 * sin(t * 2.4)) + ')'; c.fillText('?', x + 14, y - 14 + sin(t * 2) * 2);
+    for (var i = 0; i < 3; i++) { var a = (t * .5 + i / 3) % 1; c.fillStyle = 'rgba(255,246,190,' + (1 - a) * .8 + ')'; c.beginPath(); c.arc(x + sin(a * 6 + i * 2) * 10, y - 8 - a * 26, 1.3, 0, TAU); c.fill(); }
   }
   function drawSeasonParticles(c, W, G, t, season, night) {
     if (season === 'autumn') { for (var i = 0; i < 14; i++) { var p = (t * (.05 + hash(i) * .05) + hash(i + 2)) % 1, x = (hash(i + 5) * W + sin(t * .8 + i) * 22 + p * 30) % W, y = p * (G - 20); c.save(); c.translate(x, y); c.rotate(t + i); c.fillStyle = ['#e0803a', '#d9534f', '#e8b84a', '#c9702a'][i % 4]; ell(c, 0, 0, 4, 2.4); c.fill(); c.restore(); } }

@@ -22,12 +22,26 @@
   var view = { w: 390, h: 800, scale: 1, dpr: 1, cam: 0, vel: 0 };
   var canvas = $('scene'), ctx = canvas.getContext('2d'), soil = null;
   var actors = {}, particles = [], hits = [], portraits = [], sheet = null, tutArrow = null, seasonNow = 'autumn', hourNow = 12;
-  var clock = 0;
+  var rareTeaseOn = false, clock = 0, shownAcorns = null, bounce = {}, shake = 0, lastGreet = 0;
+  function calm() { return !!(st && st.settings.reduceMotion); }
+  function isSleeping(look) { if (hourNow >= 6 && hourNow < 22.5) return false; var night = (look.arch === 'winged' && (look.kind === 'owl' || look.kind === 'bat' || look.kind === 'moth')) || /glow/.test(look.arch || ''); return !night; }
+  function bump(cx, cy) { bounce[cx + ',' + cy] = clock; }
 
   function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
   function fmtN(n) { n = Math.floor(n); if (n >= 1e6) return (n / 1e6).toFixed(n >= 1e7 ? 0 : 1) + 'M'; if (n >= 1e4) return (n / 1e3).toFixed(n >= 1e5 ? 0 : 1) + 'k'; return String(n); }
   function fmtDur(ms) { ms = Math.max(0, ms); var s = Math.ceil(ms / 1000); if (s < 60) return s + 's'; var m = Math.floor(s / 60); if (m < 60) return m + 'm ' + (s % 60 ? (s % 60) + 's' : ''); var h = Math.floor(m / 60); return h + 'h ' + (m % 60) + 'm'; }
   function ic(n) { return A.ICON[n] || ''; }
+  var UP_ICON = { visitor: '🚪', rare: '✨', basket: '🧺', dig: '⛏', gift: '🎁', daily: '🎀' };
+  function pad2(n) { return (n < 10 ? '0' : '') + n; }
+  function clockLabel(at) { var d = new Date(at); return d.getHours() + ':' + pad2(d.getMinutes()); }
+  /** "in 25 min", "at 14:00", "tomorrow 9:00" (all local time) */
+  function whenLabel(at, t) {
+    var diff = at - t; if (diff < 45 * 60000) return 'in ' + Math.max(1, Math.round(diff / 60000)) + ' min';
+    var d0 = new Date(t); d0.setHours(0, 0, 0, 0); var days = Math.floor((at - d0.getTime()) / 864e5);
+    return days <= 0 ? 'at ' + clockLabel(at) : days === 1 ? 'tomorrow ' + clockLabel(at) : 'on ' + new Date(at).toLocaleDateString(undefined, { weekday: 'long' }) + ' ' + clockLabel(at);
+  }
+  function upText(u, t) { return (UP_ICON[u.kind] || '') + ' ' + u.text + ' <b>' + whenLabel(u.at, t) + '</b>'; }
+  function teaserLine(t) { var c = S.comeBack(st, t); return c ? upText(c, t) : ''; }
   var G = D.GOODS;
   function dirtyUp() { dirty = true; }
   function toast(html) { var d = doc.createElement('div'); d.className = 'toast'; d.innerHTML = html; $('toasts').appendChild(d); setTimeout(function () { d.remove(); }, 3300); }
@@ -39,13 +53,18 @@
     if (type === 'burst') { for (var i = 0; i < (o.n || 10); i++) { var a = Math.random() * 6.28, sp = 20 + Math.random() * 50; particles.push({ k: 'spark', x: x, y: y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 30, life: .7 + Math.random() * .5, age: 0, col: o.col || '#ffe58a', r: 1.5 + Math.random() * 2 }); } }
     else if (type === 'text') particles.push({ k: 'text', x: x, y: y, vx: 0, vy: -26, life: 1.6, age: 0, text: o.text, col: o.col || '#fff' });
     else if (type === 'heart') for (var h = 0; h < (o.n || 3); h++) particles.push({ k: 'heart', x: x + (Math.random() - .5) * 14, y: y - h * 4, vx: (Math.random() - .5) * 14, vy: -22 - Math.random() * 14, life: 1.3, age: 0 });
+    else if (type === 'fly') { for (var q = 0; q < (o.n || 5); q++) particles.push({ k: 'fly', sx: x + (Math.random() - .5) * 16, sy: y + (Math.random() - .5) * 10, x: x, y: y, vx: 0, vy: 0, life: .75 + Math.random() * .2, age: -q * .07, kind: o.kind || 'acorn' }); }
+    else if (type === 'float') particles.push({ k: 'float', x: x, y: y, vx: 0, vy: -(o.vy || 11), life: o.life || 2.2, age: 0, ch: o.ch, col: o.col || '#fff', size: o.size || 12, ph: Math.random() * 6 });
     else if (type === 'dirt') for (var d = 0; d < 7; d++) particles.push({ k: 'dirt', x: x + (Math.random() - .5) * 30, y: y, vx: (Math.random() - .5) * 60, vy: -40 - Math.random() * 40, life: .6, age: 0, col: ['#8a5a38', '#a9764a', '#5a3a28'][d % 3], r: 2 + Math.random() * 2 });
   }
-  function stepParticles(dt) { for (var i = particles.length - 1; i >= 0; i--) { var p = particles[i]; p.age += dt; if (p.age > p.life) { particles.splice(i, 1); continue; } p.x += p.vx * dt; p.y += p.vy * dt; if (p.k === 'dirt' || p.k === 'spark') p.vy += 120 * dt; else if (p.k === 'heart') p.vx += Math.sin(p.age * 6) * 20 * dt; } }
+  function stepParticles(dt) { for (var i = particles.length - 1; i >= 0; i--) { var p = particles[i]; p.age += dt; if (p.age > p.life) { if (p.k === 'fly') hudBump(p.kind); particles.splice(i, 1); continue; } if (p.k === 'fly') { if (p.age >= 0) { var u = p.age / p.life, e = u * u * (3 - 2 * u), tx = (p.kind === 'berry' ? 124 : 52) / view.scale, ty = 28 / view.scale + view.cam; p.x = p.sx + (tx - p.sx) * e; p.y = p.sy + (ty - p.sy) * e - Math.sin(u * 3.14) * 26; } continue; } if (p.k === 'float') { p.x += Math.sin(p.age * 2 + p.ph) * 6 * dt; p.y += p.vy * dt; continue; } p.x += p.vx * dt; p.y += p.vy * dt; if (p.k === 'dirt' || p.k === 'spark') p.vy += 120 * dt; else if (p.k === 'heart') p.vx += Math.sin(p.age * 6) * 20 * dt; } }
+  function hudBump(kind) { var el = $(kind === 'berry' ? 'chip-berry' : 'chip-acorn'); if (!el) return; el.classList.remove('bump'); void el.offsetWidth; el.classList.add('bump'); }
   function drawParticles(c) {
     particles.forEach(function (p) {
-      var a = 1 - p.age / p.life; c.globalAlpha = Math.max(0, Math.min(1, a * 1.4));
-      if (p.k === 'text') { c.font = '700 14px Fredoka,sans-serif'; c.textAlign = 'center'; c.lineWidth = 3; c.strokeStyle = 'rgba(60,35,15,.8)'; c.strokeText(p.text, p.x, p.y); c.fillStyle = p.col; c.fillText(p.text, p.x, p.y); }
+      if (p.age < 0) return; var a = 1 - p.age / p.life; if (p.k === 'float') a = Math.min(1, p.age * 2.5) * Math.min(1, (p.life - p.age) * 1.4); c.globalAlpha = Math.max(0, Math.min(1, a * 1.4));
+      if (p.k === 'fly') { c.globalAlpha = 1; if (p.kind === 'berry') { c.fillStyle = '#7fe0ff'; c.beginPath(); c.arc(p.x, p.y, 4, 0, 6.28); c.fill(); } else drawAcorn(c, p.x, p.y, .8); }
+      else if (p.k === 'float') { c.font = '700 ' + p.size + 'px Fredoka,sans-serif'; c.textAlign = 'center'; c.fillStyle = p.col; c.fillText(p.ch, p.x, p.y); }
+      else if (p.k === 'text') { c.font = '700 14px Fredoka,sans-serif'; c.textAlign = 'center'; c.lineWidth = 3; c.strokeStyle = 'rgba(60,35,15,.8)'; c.strokeText(p.text, p.x, p.y); c.fillStyle = p.col; c.fillText(p.text, p.x, p.y); }
       else if (p.k === 'heart') { A.heart(c, p.x, p.y, 4.4); c.fillStyle = '#f4758a'; c.fill(); }
       else if (p.k === 'spark') { A.star(c, p.x, p.y, p.r * 1.6, 4, .35); c.fillStyle = p.col; c.fill(); }
       else { c.fillStyle = p.col; c.beginPath(); c.arc(p.x, p.y, p.r, 0, 6.28); c.fill(); }
@@ -76,7 +95,8 @@
         if (!a) { a = actors[id] = { id: id, x: 20 + Math.random() * 50, tx: null, dir: 1, wait: Math.random() * 2, born: clock, seed: Math.random() * 20, hop: 0, vh: 0 }; }
         a.cx = cx; a.cy = cy; a.slot = i;
         var look = D.CRITTER_BY_ID[id].look, still = look.arch === 'winged' && look.kind === 'owl';
-        a.walk = 0;
+        a.walk = 0; a.sleep = isSleeping(look) && !(a.awake > clock);
+        if (a.sleep) { a.tx = null; a.wait = 3; if (a.hop <= 0 && !calm() && Math.random() < .004) fx('float', cellX(cx) + a.x + 8, cellY(cy) + CH - 40, { ch: 'z', col: '#dfe9ff', size: 11, vy: 9, life: 2.4 }); }
         if (a.hop > 0 || a.vh) { a.vh -= 260 * dt; a.hop = Math.max(0, a.hop + a.vh * dt); if (a.hop === 0) a.vh = 0; }
         if (a.tx != null) { var sp = (look.arch === 'snail' ? 5 : 14) * dt, dx = a.tx - a.x; if (Math.abs(dx) < sp) { a.x = a.tx; a.tx = null; a.wait = 1.5 + Math.random() * 4; } else { a.x += Math.sign(dx) * sp; a.dir = Math.sign(dx); a.walk = 1; } }
         else { a.wait -= dt; if (a.wait <= 0) { a.tx = 18 + Math.random() * 54; if (still || Math.abs(a.tx - a.x) < 8) { a.tx = null; a.wait = 3 + Math.random() * 4; } } }
@@ -91,10 +111,11 @@
   function drawScene() {
     var c = ctx, s = view.scale * view.dpr, t = clock;
     c.setTransform(1, 0, 0, 1, 0, 0); c.fillStyle = '#3a2a20'; c.fillRect(0, 0, canvas.width, canvas.height);
-    c.setTransform(s, 0, 0, s, 0, -view.cam * s);
+    var shx = 0, shy = 0; if (shake > 0 && !calm()) { shx = (Math.random() - .5) * shake * 6 * s; shy = (Math.random() - .5) * shake * 6 * s; shake = Math.max(0, shake - .04); }
+    c.setTransform(s, 0, 0, s, shx, -view.cam * s + shy);
     hits = [];
     var visTop = view.cam, visBot = view.cam + view.h / view.scale;
-    if (visTop < GROUND + 20) A.drawSurface(c, WW, GROUND, { t: t, hour: hourNow, season: seasonNow, doorX: DOOR_X, supporter: st.supporter });
+    if (visTop < GROUND + 20) A.drawSurface(c, WW, GROUND, { t: t, hour: hourNow, season: seasonNow, doorX: DOOR_X, supporter: st.supporter, rareTease: rareTeaseOn });
     c.drawImage(soil, 0, 0, soil.width, soil.height, 0, GROUND, WW, WORLD_H - GROUND);
     for (var id in st.decor.placed) if (st.decor.placed[id]) A.drawDecor(c, id, t, GROUND, DOOR_X);
     D.GRID.strata.forEach(function (sr, i) { if (i === 0) return; var y = cellY(sr.fromRow); c.fillStyle = 'rgba(255,240,210,.16)'; c.fillRect(0, y - 1, WW, 2); c.font = '600 9px Fredoka,sans-serif'; c.textAlign = 'right'; c.fillStyle = 'rgba(255,240,210,.5)'; c.fillText(sr.name.toUpperCase() + ' · Lv ' + sr.level, WW - 6, y + 10); });
@@ -105,6 +126,7 @@
       for (var cx = 0; cx < COLS; cx++) {
         var x0 = cellX(cx), cell = S.cellAt(st, cx, cy), dg = st.digs.filter(function (d) { return d.x === cx && d.y === cy; })[0];
         c.save(); c.translate(x0, y0);
+        var bt = clock - (bounce[cx + ',' + cy] || -9); if (bt < .5 && !calm()) { var bk = Math.sin(bt / .5 * 3.14 * 2.2) * (1 - bt / .5) * .05; c.translate(CW / 2, CH); c.scale(1 + bk, 1 - bk); c.translate(-CW / 2, -CH); }
         if (cell && cell.dug) { if (cell.foyer) A.drawFoyer(c, t, CW, CH); else if (cell.room) A.drawRoom(c, cell.room.id, t, CW, CH); else A.drawEmptyCell(c, t, CW, CH, true); }
         else if (dg) drawDigging(c, dg, t);
         else if (S.canDigCell(st, cx, cy)) drawDiggable(c, cx, cy, t);
@@ -132,11 +154,22 @@
       var x0 = cellX(cx), y0 = cellY(cy); if (y0 > visBot + 10 || y0 + CH < visTop - 10) return;
       var def = D.ROOM_BY_ID[room.id];
       drawLabel(c, def.name, x0 + CW / 2, y0 + CH - 3, 9);
+      if (!calm() && particles.length < 160) {
+        var rn = Math.random();
+        if (room.id === 'music' && rn < .012) fx('float', x0 + 30 + Math.random() * 30, y0 + 50, { ch: Math.random() < .5 ? '♪' : '♫', col: ['#ffd9a0', '#ffb6c9', '#bfe3ff'][Math.floor(Math.random() * 3)], size: 13, vy: 14 });
+        else if (room.id === 'library' && rn < .02) fx('float', x0 + 14 + Math.random() * 60, y0 + 56, { ch: '•', col: 'rgba(255,240,200,.7)', size: 6, vy: 5, life: 3 });
+        else if (room.id === 'farm' && rn < .015) fx('float', x0 + 12 + Math.random() * 60, y0 + CH - 28, { ch: '·', col: '#f6f0c8', size: 14, vy: 8, life: 2.6 });
+        else if (room.id === 'glow' && rn < .02) fx('float', x0 + 10 + Math.random() * 66, y0 + CH - 20, { ch: '✦', col: '#9ff0ff', size: 8, vy: 6, life: 2.8 });
+        else if (room.id === 'honey' && rn < .008) fx('float', x0 + 20 + Math.random() * 50, y0 + 40, { ch: '•', col: '#ffc233', size: 7, vy: -16, life: 1.3 });
+        else if (room.id === 'loft' && rn < .01) fx('float', x0 + 10 + Math.random() * 66, y0 + 30, { ch: '✦', col: '#fff3b0', size: 9, vy: 3, life: 3 });
+        else if (room.id === 'tea' && rn < .008) fx('float', x0 + 40 + Math.random() * 14, y0 + CH - 36, { ch: '~', col: 'rgba(255,255,255,.7)', size: 12, vy: 10, life: 2 });
+        else if (room.id === 'spring' && rn < .012) fx('float', x0 + 24 + Math.random() * 40, y0 + CH - 30, { ch: '○', col: 'rgba(255,255,255,.6)', size: 8, vy: 12, life: 2.2 });
+      }
       for (var p = 0; p < D.ROOM_LEVELS.max; p++) { c.fillStyle = p < room.lvl ? '#ffd462' : 'rgba(0,0,0,.35)'; c.beginPath(); c.arc(x0 + 8 + p * 6.5, y0 + 7, 2.2, 0, 6.28); c.fill(); }
       var list = room.critters.map(function (id) { return actors[id]; }).filter(Boolean).sort(function (a, b) { return a.slot - b.slot; });
       list.forEach(function (a) {
         var cr = D.CRITTER_BY_ID[a.id], pop = Math.min(1, (clock - a.born) / .5), sc = pop < 1 ? (.2 + pop * .9 + Math.sin(pop * 3.14) * .25) : 1;
-        c.save(); c.translate(x0, y0); A.drawCritter(c, cr.look, { t: clock, x: a.x, y: CH - 11 - (a.slot % 2) * 2, dir: a.dir, walk: a.walk, seed: a.seed, hop: a.hop, scale: sc }); c.restore();
+        c.save(); c.translate(x0, y0); A.drawCritter(c, cr.look, { t: clock, x: a.x, y: CH - 11 - (a.slot % 2) * 2, dir: a.dir, walk: a.walk, seed: a.seed, hop: a.hop, scale: sc, sleep: a.sleep }); c.restore();
         if (clock - a.born < 1.2 && Math.random() < .3) fx('burst', x0 + a.x, y0 + CH - 24, { n: 1 });
         hits.push({ kind: 'critter', id: a.id, x: x0 + a.x - 14, y: y0 + CH - 46, w: 28, h: 40 });
       });
@@ -196,6 +229,7 @@
       if (clock - lastSecond >= 1) { lastSecond = clock; secondly(); }
       if (view.target != null) { view.cam += (view.target - view.cam) * Math.min(1, dt * 6); if (Math.abs(view.target - view.cam) < .5) view.target = null; }
       if (Math.abs(view.vel) > .02) { view.cam += view.vel * dt * 60; view.vel *= .94; clampCam(); }
+      if (shownAcorns != null && Math.floor(shownAcorns) !== Math.floor(st.acorns)) { var gap = st.acorns - shownAcorns; shownAcorns += Math.abs(gap) < 1 ? gap : (gap > 0 ? Math.max(1, gap * Math.min(1, dt * 7)) : gap * Math.min(1, dt * 12)); if (Math.abs(st.acorns - shownAcorns) < 1) shownAcorns = st.acorns; refreshHud(); }
       updateTutorialArrow(); syncActors(dt); stepParticles(dt); drawScene();
       if (sheet && sheet.anim) sheet.anim();
     }
@@ -207,7 +241,7 @@
     var tev = S.tutorialAdvance(st, now()); if (tev.length) handleEvents(tev);
     checkLevel();
     refreshHud(); if (sheet && sheet.render && sheet.live) renderSheet();
-    AU.setNight(A.nightness(hourNow));
+    AU.setNight(A.nightness(hourNow)); var rh0 = S.rareHint(st, now()); rareTeaseOn = !!(rh0.guaranteed && rh0.tonight && rh0.unlocked && st.tut >= 5 && hourNow >= 15 && hourNow < 21);
     if (dirty && clock - lastSave > 3) save();
   }
   function handleEvents(ev) {
@@ -225,11 +259,10 @@
   var lastHud = '';
   function refreshHud() {
     var lp = S.levelProgress(st);
-    var a = '<span>' + ic('acorn') + '</span><b>' + fmtN(st.acorns) + '</b>', b = ic('berry') + '<b>' + fmtN(st.berries) + '</b>';
+    if (shownAcorns == null || calm()) shownAcorns = st.acorns; var a = '<span>' + ic('acorn') + '</span><b>' + fmtN(shownAcorns) + '</b>', b = ic('berry') + '<b>' + fmtN(st.berries) + '</b>';
     var l = 'Lv ' + lp.level + '<span class="lvl-bar"><i style="width:' + Math.round(lp.pct * 100) + '%"></i></span>';
     var key = a + b + l; if (key !== lastHud) {
-      var ac = $('chip-acorn'), bc = $('chip-berry'); if (ac.dataset.v && +ac.dataset.v !== Math.floor(st.acorns)) { ac.classList.remove('bump'); void ac.offsetWidth; ac.classList.add('bump'); }
-      ac.dataset.v = Math.floor(st.acorns); ac.innerHTML = a; bc.innerHTML = b; $('chip-level').innerHTML = l; lastHud = key;
+      var ac = $('chip-acorn'), bc = $('chip-berry'); ac.dataset.v = Math.floor(shownAcorns); ac.innerHTML = a; bc.innerHTML = b; $('chip-level').innerHTML = l; lastHud = key;
     }
     var tr = totalReady(), fab = $('btn-collect');
     if ((tr.goods >= 1 || tr.gifts) && !sheet && st.tut >= 3) { fab.classList.remove('hidden'); fab.innerHTML = ic('basket') + ' Collect all <small>+' + fmtN(tr.acorns) + '</small>'; } else fab.classList.add('hidden');
@@ -254,7 +287,9 @@
   function introOpen() { return !$('intro').classList.contains('hidden'); }
   function updateHint() {
     var h = $('hint');
-    if (st.tut < 5 && !sheet && !introOpen()) { h.classList.remove('hidden'); if (h.textContent !== HINTS[st.tut]) h.textContent = HINTS[st.tut]; } else h.classList.add('hidden');
+    if (st.tut < 5 && !sheet && !introOpen()) { h.classList.remove('hidden', 'soft'); h.removeAttribute('data-act'); if (h.textContent !== HINTS[st.tut]) h.textContent = HINTS[st.tut]; }
+    else if (st.tut >= 5 && !sheet && !introOpen()) { var tl = teaserLine(now()); if (tl) { h.classList.remove('hidden'); h.classList.add('soft'); h.setAttribute('data-act', 'open-door'); if (h.dataset.html !== tl) { h.dataset.html = tl; h.innerHTML = tl; } } else h.classList.add('hidden'); }
+    else h.classList.add('hidden');
   }
   function updateTutorialArrow() {
     tutArrow = null; if (st.tut >= 5 || sheet || introOpen()) return;
@@ -268,7 +303,7 @@
     if (tx != null) { tutArrow = { x: tx, y: ty }; var key = st.tut + ':' + ty; if (view.followed !== key) { view.followed = key; scrollTo(ty - 40); } }
   }
   function tutorialFinale() {
-    openSheet({ title: 'See you soon! 🌙', html: '<p>Your burrow keeps working while you are away. Baskets fill up (they hold a few hours), friends knock at the door a few times a day, and Crumb is waiting for a Bakery.</p><p class="mut">There is never a rush: nothing is lost if you take a day off.</p>' + (P.Notify.supported ? '<div class="row"><button class="btn gold" data-act="notif-on">Remind me gently</button><button class="btn plain" data-act="close">Not now</button></div>' : '<button class="btn" data-act="close">Cosy!</button>'), kind: 'finale' });
+    openSheet({ title: 'See you soon! 🌙', html: '<p>Your burrow keeps working while you are away. Baskets fill up (they hold a few hours) and friends knock at the door a few times a day.</p>' + (function () { var t = now(), ups = S.nextUps(st, t).filter(function (u) { return u.kind !== 'gift'; }).slice(0, 3); return ups.length ? '<div class="card col"><b>Come back around:</b>' + ups.map(function (u) { return '<div class="row sp up"><span>' + (UP_ICON[u.kind] || '') + ' ' + esc(u.text) + '</span><b>' + whenLabel(u.at, t) + '</b></div>'; }).join('') + '</div>' : ''; })() + '<p class="mut">Crumb is waiting for a Bakery, and tomorrow brings a visit gift. There is never a rush: nothing is lost if you take a day off.</p>' + (P.Notify.supported ? '<div class="row"><button class="btn gold" data-act="notif-on">Remind me gently</button><button class="btn plain" data-act="close">Not now</button></div>' : '<button class="btn" data-act="close">Cosy!</button>'), kind: 'finale' });
   }
   function levelUp(L) {
     snd('levelup'); dirtyUp(); var unlocked = D.ROOMS.filter(function (r) { return r.unlock === L; }); var strata = D.GRID.strata.filter(function (s) { return s.level === L; });
@@ -352,13 +387,17 @@
       var t = now(), html = '';
       if (S.dailyAvailable(st, t)) {
         var idx = st.daily.index % 7; html += '<div class="card col"><div class="row sp"><b>' + ic('gift') + ' Daily visit gift</b><span class="mut">Visit day ' + st.visitDays + '</span></div><div class="cal">' + D.DAILY.map(function (d, i) { var lab = d.acorns ? d.acorns + '🌰' : d.berries ? d.berries + '🫐' : '📦'; return '<div class="day ' + (i < idx ? 'done' : i === idx ? 'today' : '') + '"><b>' + (i + 1) + '</b>' + lab + '</div>'; }).join('') + '</div><button class="btn gold" data-act="daily">Claim today\'s gift</button><p class="mut" style="margin:0">Skipped days never reset your calendar.</p></div>';
-      } else html += '<p class="mut" style="margin:0 0 4px">' + ic('gift') + ' Today\'s gift is claimed. See you tomorrow!</p>';
+      } else { var tg = S.tomorrowGift(st, t), tl = tg.reward.acorns ? tg.reward.acorns + ' 🌰' : tg.reward.berries ? tg.reward.berries + ' 🫐' : tg.reward.goods + ' goods 📦'; html += '<p class="mut" style="margin:0 0 4px">' + ic('gift') + ' Today\'s gift is claimed. <b>Tomorrow, day ' + tg.day + ': ' + tl + '</b>' + (tg.reward.label ? ' (' + esc(tg.reward.label) + ')' : '') + '</p>'; }
       html += '<div class="sec">Waiting friends · ' + st.visitors.length + '</div>';
       if (!st.visitors.length) html += '<p class="mut">Nobody at the door right now. Friends drop by around 9:00, 14:00 and 19:00, and sometimes late in the evening.</p>';
       st.visitors.forEach(function (v) {
         var cr = D.CRITTER_BY_ID[v.critter], have = st.goods[v.good] || 0, ok = have >= v.n, g = G[v.good], a = st.album[v.critter];
         html += '<div class="card"><canvas class="cv" data-critter="' + v.critter + '" data-anim="1"></canvas><div class="grow"><h3>' + esc(cr.name) + ' ' + critterPill(cr) + (v.rare ? ' ✨' : '') + '</h3><p>"' + esc(a ? cr.quote : 'Hello! May I trouble you for some ' + g.name.toLowerCase() + '?') + '"</p><p><b>Wants ' + g.icon + ' ' + v.n + '</b> <span class="' + (ok ? 'mut' : 'need') + '">(you have ' + have + ')</span></p>' + (!S.hasRoom(st, cr.room) ? '<p class="mut">Would love a ' + esc(D.ROOM_BY_ID[cr.room].name) + '.</p>' : '') + '</div><button class="btn ' + (ok ? 'gold' : 'off') + ' small" data-act="give" data-id="' + v.id + '">Give</button></div>';
       });
+      var ups = S.nextUps(st, t).slice(0, 4);
+      if (ups.length) html += '<div class="sec">Coming up</div><div class="card col">' + ups.map(function (u) { return '<div class="row sp up' + (u.guaranteed ? ' rare' : '') + '"><span>' + (UP_ICON[u.kind] || '') + ' ' + esc(u.text) + '</span><b>' + whenLabel(u.at, t) + '</b></div>'; }).join('') + '</div>';
+      var rh = S.rareHint(st, t);
+      if (rh.unlocked && st.tut >= 5) html += '<div class="card col"><div class="row sp"><b>✨ Late-night guest</b><span class="mut">21:00</span></div><p style="margin:0">' + (rh.guaranteed ? 'A rare guest is due tonight. Leave the lantern on!' : 'Each evening there is a ' + Math.round(rh.chance * 100) + '% chance that someone rare drops by. Quiet nights make it likelier.') + '</p><div class="bar"><i style="width:' + Math.min(100, rh.quietDays / rh.pityDays * 100) + '%;background:linear-gradient(#e0c5ff,#b48be0)"></i></div><div class="mut" style="font-size:12px">' + (rh.guaranteed ? 'Guaranteed tonight' : rh.quietDays + ' / ' + rh.pityDays + ' quiet days until a guaranteed visit') + '</div></div>';
       html += '<div class="sec">Season</div>'; var sd = st.season.days, seasonName = seasonNow[0].toUpperCase() + seasonNow.slice(1);
       html += '<div class="card col"><div class="row sp"><b>' + seasonName + ' visit gift</b><span class="mut">' + Math.min(5, sd) + ' / 5 days</span></div><div class="bar green"><i style="width:' + Math.min(100, sd / 5 * 100) + '%"></i></div>' + (sd >= 5 && !st.season.claimed ? '<button class="btn gold" data-act="season-gift">Claim a free ' + seasonName.toLowerCase() + ' decoration</button>' : '<p class="mut" style="margin:0">Visit on 5 different days this season for a free decoration. No streak needed.</p>') + '</div>';
       html += '<div class="card"><div class="grow"><h3>🔔 Wanderer\'s bell</h3><p>Ring it to invite one extra guest today (optional, once a day).</p></div><button class="btn sky small ' + (S.adsLeft(st) < 1 || st.ads.bell >= 1 || st.visitors.length >= D.VISITORS.maxWaiting ? 'off' : '') + '" data-act="ad-bell">▶ Ring</button></div>';
@@ -369,12 +408,12 @@
   function albumSheet() {
     return { title: 'Critter album', kind: 'album', full: true, render: function () {
       var met = S.albumCount(st), res = Object.keys(st.album).filter(function (k) { return st.album[k].resident; }).length;
-      var html = '<div class="card col"><div class="row sp"><b>' + met + ' / ' + D.CRITTERS.length + ' met</b><span class="mut">' + res + ' living here</span></div><div class="bar green"><i style="width:' + (met / D.CRITTERS.length * 100) + '%"></i></div><div class="row" style="flex-wrap:wrap;gap:6px">' + S.albumMilestones(st).map(function (m) { return '<button class="btn small ' + (m.ready ? 'gold' : 'plain off') + '" data-act="album-claim" data-at="' + m.at + '">' + (m.claimed ? '✓ ' : '') + m.at + ' → ' + m.berries + '🫐' + (m.acorns ? ' +' + fmtN(m.acorns) + '🌰' : '') + '</button>'; }).join('') + '</div></div>';
+      var html = '<div class="card col"><div class="row sp"><b>' + met + ' / ' + D.CRITTERS.length + ' met</b><span class="mut">' + res + ' living here</span></div><div class="bar green"><i style="width:' + (met / D.CRITTERS.length * 100) + '%"></i></div>' + (function () { var n = S.albumNudge(st); return n.next ? '<p class="mut" style="margin:0">' + n.next.need + ' more friend' + (n.next.need > 1 ? 's' : '') + ' → <b>🫐' + n.next.berries + (n.next.acorns ? ' +' + fmtN(n.next.acorns) + '🌰' : '') + '</b></p>' : '<p class="mut" style="margin:0">Every friend is in your album. 💛</p>'; })() + '<div class="row" style="flex-wrap:wrap;gap:6px">' + S.albumMilestones(st).map(function (m) { return '<button class="btn small ' + (m.ready ? 'gold' : 'plain off') + '" data-act="album-claim" data-at="' + m.at + '">' + (m.claimed ? '✓ ' : '') + m.at + ' → ' + m.berries + '🫐' + (m.acorns ? ' +' + fmtN(m.acorns) + '🌰' : '') + '</button>'; }).join('') + '</div></div>';
       var filters = [['all', 'All'], ['met', 'Met'], ['home', 'Living here']].concat(Object.keys(D.RARITY).map(function (r) { return [r, D.RARITY[r].name]; }));
       html += '<div class="chips2">' + filters.map(function (f) { return '<button class="chip2 ' + (album.filter === f[0] ? 'on' : '') + '" data-act="album-filter" data-f="' + f[0] + '">' + f[1] + '</button>'; }).join('') + '</div><div class="grid3">';
       D.CRITTERS.filter(function (c) { var a = st.album[c.id]; if (album.filter === 'met') return !!a; if (album.filter === 'home') return a && a.resident; if (D.RARITY[album.filter]) return c.rarity === album.filter; return true; }).forEach(function (c) {
         var a = st.album[c.id], r = D.RARITY[c.rarity];
-        html += '<div class="acard ' + (a ? '' : 'un') + '" data-act="critter" data-id="' + c.id + '"><span class="dot" style="background:' + r.color + '"></span>' + (a && a.resident ? '<span class="home">🏠</span>' : '') + '<canvas data-critter="' + c.id + '" data-sil="' + (a ? 0 : 1) + '"></canvas><div class="nm">' + (a ? esc(c.name) : '???') + '</div></div>';
+        html += '<div class="acard ' + (a ? '' : 'un') + '" data-act="critter" data-id="' + c.id + '"><span class="dot" style="background:' + r.color + '"></span>' + (a && a.resident ? '<span class="home">🏠</span>' : '') + '<canvas data-critter="' + c.id + '" data-sil="' + (a ? 0 : 1) + '"></canvas><div class="nm">' + (a ? esc(c.name) : '???') + '</div>' + (!a ? '<div class="sub">' + (S.hasRoom(st, c.room) ? '⏳ may knock soon' : esc(D.ROOM_BY_ID[c.room].name)) + '</div>' : '') + '</div>';
       });
       return html + '</div>';
     } };
@@ -384,7 +423,11 @@
       var c = D.CRITTER_BY_ID[id], a = st.album[id], room = D.ROOM_BY_ID[c.room];
       var html = '<div style="text-align:center"><canvas class="cv" style="width:150px;height:150px" data-critter="' + id + '" data-sil="' + (a ? 0 : 1) + '" data-anim="' + (a ? 1 : 0) + '"></canvas></div>';
       if (!a) return html + '<p style="text-align:center">' + critterPill(c) + '</p><p class="mut" style="text-align:center">Not met yet. They like the <b>' + esc(room.name) + '</b>' + (S.hasRoom(st, c.room) ? '. Keep an eye on the door!' : ', which you haven\'t built yet.') + '</p>';
-      return html + '<p style="text-align:center;margin:4px 0">' + esc(c.species) + ' · ' + critterPill(c) + '</p><div class="card col"><p style="margin:0"><b>' + esc(c.trait) + '</b></p><p style="margin:0">"' + esc(c.quote) + '"</p></div><div class="card"><div class="grow"><h3>Loves the ' + esc(room.name) + '</h3><p>Boosts ' + G[room.good].name + ' by ' + Math.round(D.RARITY[c.rarity].bonus * 100) + '% when living there.</p></div></div><p class="mut" style="text-align:center">' + (a.resident ? '🏠 Living in your ' + esc(room.name) : 'Waiting for a free bed in the ' + esc(room.name)) + ' · met ' + a.visits + ' time' + (a.visits === 1 ? '' : 's') + '</p>';
+      return html + '<p style="text-align:center;margin:4px 0">' + esc(c.species) + ' · ' + critterPill(c) + '</p><div class="card col"><p style="margin:0"><b>' + esc(c.trait) + '</b></p><p style="margin:0">"' + esc(c.quote) + '"</p></div><div class="card"><div class="grow"><h3>Loves the ' + esc(room.name) + '</h3><p>Boosts ' + G[room.good].name + ' by ' + Math.round(D.RARITY[c.rarity].bonus * 100) + '% when living there.</p></div></div>' + (function () {
+        if (!a.resident && !(a.hearts > 0)) return ''; var h = a.hearts || 0, lv = S.heartLevel(h), nx = D.FRIENDSHIP.hearts[lv], out = '<div class="card col"><div class="row sp"><b>' + heartsRow(lv, 3) + ' ' + D.FRIENDSHIP.names[lv] + '</b><span class="mut">' + (nx ? h + ' / ' + nx + ' gifts' : 'maxed') + '</span></div>';
+        for (var i = 1; i <= 3; i++) out += i <= lv ? '<p style="margin:0">' + heartsRow(i, i) + ' ' + esc(S.storyLine(id, i)) + '</p>' : '<p class="mut" style="margin:0;opacity:.7">🔒 Story ' + i + ': keep collecting their gifts (' + D.FRIENDSHIP.hearts[i - 1] + ')</p>';
+        return out + '</div>';
+      })() + '<p class="mut" style="text-align:center">' + (a.resident ? '🏠 Living in your ' + esc(room.name) : 'Waiting for a free bed in the ' + esc(room.name)) + ' · met ' + a.visits + ' time' + (a.visits === 1 ? '' : 's') + '</p>';
     } };
   }
   function nookSheet() {
@@ -414,11 +457,21 @@
 
   // ---------- actions ----------
   var actions = {
+    'open-door': function () { snd('tap'); setTab('door'); openSheet(doorSheet()); },
     close: function () { snd('tap'); closeSheet(); },
     collect: function (el) { doCollect(+el.dataset.x, +el.dataset.y); },
-    gift: function (el) { var x = +el.dataset.x, y = +el.dataset.y, r = S.collectGift(st, x, y, now()); if (!r.ok) return; snd('gift'); var wx = cellX(x) + 20, wy = cellY(y) + 20; fx('burst', wx, wy, { n: 14, col: '#ffb6c9' }); fx('text', wx, wy - 6, { text: '+' + fmtN(r.acorns) + ' 🌰', col: '#ffe58a' }); if (r.berries) { fx('text', wx, wy - 22, { text: '+1 🫐', col: '#9fefff' }); toast('A Glowberry! ' + ic('berry')); } dirtyUp(); refreshHud(); if (sheet) renderSheet(); },
-    upgrade: function (el) { var r = S.upgradeRoom(st, +el.dataset.x, +el.dataset.y, now()); if (!r.ok) { snd('error'); return; } snd('build'); fx('burst', cellX(+el.dataset.x) + 45, cellY(+el.dataset.y) + 40, { n: 20 }); toast('Level ' + r.level + '! Cosier already.'); afterMoves(r.moved); dirtyUp(); checkLevel(); renderSheet(); },
-    build: function (el) { var x = +el.dataset.x, y = +el.dataset.y, r = S.buildRoom(st, x, y, el.dataset.room, now()); if (!r.ok) { snd('error'); return; } snd('build'); fx('burst', cellX(x) + 45, cellY(y) + 44, { n: 22 }); closeSheet(); afterMoves(r.moved); dirtyUp(); handleEvents(S.tutorialAdvance(st, now())); checkLevel(); save(); },
+    gift: function (el) {
+      var x = +el.dataset.x, y = +el.dataset.y, r = S.collectGift(st, x, y, now()); if (!r.ok) return;
+      snd('gift'); bump(x, y); var wx = cellX(x) + 20, wy = cellY(y) + 20; fx('burst', wx, wy, { n: 14, col: '#ffb6c9' }); fx('heart', wx, wy, { n: 3 });
+      if (!calm()) fx('fly', wx, wy, { n: 4 }); fx('text', wx, wy - 6, { text: '+' + fmtN(r.acorns) + ' 🌰', col: '#ffe58a' });
+      if (r.berries && !r.levelUp) { fx('fly', wx, wy, { n: 2, kind: 'berry' }); toast('A Glowberry! ' + ic('berry')); }
+      var cr = r.critter && D.CRITTER_BY_ID[r.critter];
+      if (r.levelUp) setTimeout(function () { friendCard(r.critter, r.levelUp); }, 450);
+      else if (cr) toast('♥ <b>' + esc(cr.name) + '</b> left you a gift' + (r.nextAt ? ' <span style="opacity:.8">(' + r.hearts + ' / ' + r.nextAt + ' to the next story)</span>' : ''));
+      dirtyUp(); refreshHud(); if (sheet && sheet.live) renderSheet();
+    },
+    upgrade: function (el) { var r = S.upgradeRoom(st, +el.dataset.x, +el.dataset.y, now()); if (!r.ok) { snd('error'); return; } snd('build'); bump(+el.dataset.x, +el.dataset.y); fx('burst', cellX(+el.dataset.x) + 45, cellY(+el.dataset.y) + 40, { n: 20 }); toast('Level ' + r.level + '! Cosier already.'); afterMoves(r.moved); dirtyUp(); checkLevel(); renderSheet(); },
+    build: function (el) { var x = +el.dataset.x, y = +el.dataset.y, r = S.buildRoom(st, x, y, el.dataset.room, now()); if (!r.ok) { snd('error'); return; } snd('build'); bump(x, y); shake = .8; fx('burst', cellX(x) + 45, cellY(y) + 44, { n: 22 }); closeSheet(); afterMoves(r.moved); dirtyUp(); handleEvents(S.tutorialAdvance(st, now())); checkLevel(); save(); },
     dig: function (el) { var r = S.startDig(st, +el.dataset.x, +el.dataset.y, now()); if (!r.ok) { snd('error'); return; } snd('dig'); closeSheet(); toast('⛏ Digging started. It finishes by itself.'); dirtyUp(); save(); },
     'skip-dig': function (el) { var r = S.skipDigWithBerries(st, +el.dataset.x, +el.dataset.y, now()); if (!r.ok) { snd('error'); return; } handleEvents(r.events); dirtyUp(); closeSheet(); },
     'ad-dig': function () { watchAd('dig', function () { var r = S.adReward(st, 'dig', now()); if (r.ok) { toast('Half the time left.'); dirtyUp(); } renderSheet(); }); },
@@ -427,9 +480,14 @@
     'ad-bell': function () { watchAd('bell', function () { var r = S.adReward(st, 'bell', now()); if (r.ok) { snd('knock'); toast('🔔 <b>' + esc(D.CRITTER_BY_ID[r.visitor.critter].name) + '</b> heard the bell!'); dirtyUp(); } renderSheet(); }); },
     give: function (el) {
       var r = S.fulfillVisitor(st, el.dataset.id, now()); if (!r.ok) { snd('error'); return; } var cr = D.CRITTER_BY_ID[r.critter]; snd(r.moved ? 'arrive' : 'collect'); fx('burst', DOOR_X + 50, GROUND - 40, { n: 14 }); fx('heart', DOOR_X + 50, GROUND - 40, { n: 4 }); fx('text', DOOR_X + 50, GROUND - 58, { text: '+' + fmtN(r.acorns) + ' 🌰', col: '#ffe58a' });
-      var msg = '<b>' + esc(cr.name) + '</b> is delighted! +' + fmtN(r.acorns) + ' 🌰' + (r.berries ? ' +' + r.berries + ' 🫐' : '');
+      if (!calm()) { fx('fly', DOOR_X + 50, GROUND - 40, { n: 5 }); if (r.berries) fx('fly', DOOR_X + 50, GROUND - 40, { n: 1, kind: 'berry' }); }
+      if (r.moved) { bump(r.moved.x, r.moved.y); }
+      var rare = cr.rarity === 'rare' || cr.rarity === 'legendary';
+      var nudge = S.albumNudge(st), msg = '<b>' + esc(cr.name) + '</b> is delighted! +' + fmtN(r.acorns) + ' 🌰' + (r.berries ? ' +' + r.berries + ' 🫐' : '');
       if (r.moved) msg += ' And they moved into your ' + D.ROOM_BY_ID[cr.room].name + '! 🏠'; else if (!S.hasRoom(st, cr.room)) msg += ' They\'d love a ' + D.ROOM_BY_ID[cr.room].name + '.'; else msg += ' No free bed yet: upgrade the ' + D.ROOM_BY_ID[cr.room].name + '.';
-      toast(msg); dirtyUp(); handleEvents(S.tutorialAdvance(st, now())); checkLevel(); renderSheet();
+      if (r.first && !rare && nudge.next) msg += '<br><span style="opacity:.85">📖 Album ' + nudge.count + ' / ' + nudge.total + ': ' + nudge.next.need + ' more for 🫐' + nudge.next.berries + '</span>';
+      toast(msg); dirtyUp(); handleEvents(S.tutorialAdvance(st, now())); checkLevel();
+      if (r.first && rare) setTimeout(function () { meetCard(r.critter, r); }, 500); else renderSheet();
     },
     daily: function () { var r = S.claimDaily(st, now()); if (!r.ok) return; snd('gift'); var rw = r.reward; toast('🎁 ' + (rw.acorns ? '+' + rw.acorns + ' 🌰' : rw.berries ? '+' + rw.berries + ' 🫐' : '+' + rw.goods + ' ' + G[r.good].icon)); fx('burst', DOOR_X, GROUND - 40, { n: 16 }); dirtyUp(); renderSheet(); },
     'season-gift': function () { var r = S.claimSeasonGift(st, now()); if (r.ok) { snd('gift'); toast('🎀 A new decoration is up above ground!'); dirtyUp(); renderSheet(); } },
@@ -453,12 +511,44 @@
   };
   function afterMoves(moved) { (moved || []).forEach(function (m) { var cr = D.CRITTER_BY_ID[m.id]; toast('🏠 <b>' + esc(cr.name) + '</b> moved into the ' + D.ROOM_BY_ID[cr.room].name + '!'); fx('heart', cellX(m.x) + 45, cellY(m.y) + 40, { n: 4 }); fx('burst', cellX(m.x) + 45, cellY(m.y) + 50, { n: 12 }); }); }
   function checkLevel() { var L = S.level(st); if (L > (checkLevel.last || 1)) { checkLevel.last = L; levelUp(L); } }
-  function collectFx(x, y, r) { var wx = cellX(x) + CW - 20, wy = cellY(y) + 20; snd('collect'); fx('text', wx, wy, { text: '+' + fmtN(r.goods) + ' ' + G[r.good].icon, col: '#fff' }); fx('text', wx, wy + 14, { text: '+' + fmtN(r.acorns) + ' 🌰', col: '#ffe58a' }); fx('burst', wx, wy, { n: 8 }); }
+  function collectFx(x, y, r) {
+    var wx = cellX(x) + CW - 20, wy = cellY(y) + 20; snd('collect'); bump(x, y);
+    fx('text', wx, wy, { text: '+' + fmtN(r.goods) + ' ' + G[r.good].icon, col: '#fff' }); fx('burst', wx, wy, { n: 8 });
+    if (!calm()) fx('fly', wx, wy + 8, { n: Math.min(8, 2 + Math.floor(r.acorns / 60)) }); else fx('text', wx, wy + 14, { text: '+' + fmtN(r.acorns) + ' 🌰', col: '#ffe58a' });
+  }
   function doCollect(x, y) { var r = S.collect(st, x, y, now()); if (!r.ok) return false; collectFx(x, y, r); dirtyUp(); handleEvents(S.tutorialAdvance(st, now())); refreshHud(); if (sheet) renderSheet(); return true; }
   function collectAllNow() {
-    var any = false, tr = totalReady(); S.eachRoom(st, function (r, x, y) { if (S.collect(st, x, y, now()).ok) any = true; });
-    var gifts = 0; S.eachRoom(st, function (r, x, y) { if (r.giftReady) { var g = S.collectGift(st, x, y, now()); if (g.ok) { gifts++; fx('burst', cellX(x) + 20, cellY(y) + 20, { n: 8, col: '#ffb6c9' }); } } });
-    if (any || gifts) { snd('collect'); fx('text', 195, view.cam + view.h / view.scale * .5, { text: '+' + fmtN(tr.acorns) + ' 🌰', col: '#ffe58a' }); handleEvents(S.tutorialAdvance(st, now())); dirtyUp(); refreshHud(); }
+    var any = false, tr = totalReady(), lvl = null; S.eachRoom(st, function (r, x, y) { if (S.collect(st, x, y, now()).ok) { any = true; bump(x, y); } });
+    var gifts = 0; S.eachRoom(st, function (r, x, y) { if (r.giftReady) { var g = S.collectGift(st, x, y, now()); if (g.ok) { gifts++; bump(x, y); fx('burst', cellX(x) + 20, cellY(y) + 20, { n: 8, col: '#ffb6c9' }); if (g.levelUp && !lvl) lvl = g; } } });
+    if (any || gifts) {
+      snd('collect'); var cy0 = view.cam + view.h / view.scale * .5; fx('text', 195, cy0, { text: '+' + fmtN(tr.acorns) + ' 🌰', col: '#ffe58a' }); if (!calm()) fx('fly', 195, cy0 + 10, { n: 8 });
+      handleEvents(S.tutorialAdvance(st, now())); dirtyUp(); refreshHud();
+      if (lvl) setTimeout(function () { friendCard(lvl.critter, lvl.levelUp); }, 500);
+      else if (st.tut >= 5) { var tl = teaserLine(now()); if (tl) setTimeout(function () { toast('See you soon!<br>' + tl); }, 900); }
+    }
+  }
+
+  // ---------- celebration cards ----------
+  function heartsRow(n, max) { var h = ''; for (var i = 0; i < max; i++) h += '<span style="opacity:' + (i < n ? 1 : .25) + '">♥</span>'; return '<span style="color:#e8566e;letter-spacing:2px">' + h + '</span>'; }
+  function friendCard(id, lu) {
+    var cr = D.CRITTER_BY_ID[id]; snd('levelup'); fx('heart', DOOR_X, GROUND - 30, { n: 6 });
+    openSheet({ title: esc(cr.name) + ' trusts you more', kind: 'friend', live: false, anim: animatePortraits, render: function () {
+      return '<div style="text-align:center"><canvas class="cv" style="width:130px;height:130px" data-critter="' + id + '" data-anim="1"></canvas><div style="font-size:22px">' + heartsRow(lu.level, 3) + '</div><p style="margin:2px 0"><b>' + D.FRIENDSHIP.names[lu.level] + '</b></p></div>'
+        + '<div class="card col"><p style="margin:0">' + esc(lu.story) + '</p></div><p style="text-align:center;margin:4px 0">Thank-you: +' + fmtN(lu.acorns) + ' 🌰' + (lu.berries ? ' +' + lu.berries + ' 🫐' : '') + '</p><button class="btn" data-act="close">Lovely</button>';
+    } });
+  }
+  function meetCard(id, r) {
+    var cr = D.CRITTER_BY_ID[id], nudge = S.albumNudge(st), rar = D.RARITY[cr.rarity]; snd('chime'); fx('burst', DOOR_X + 40, GROUND - 40, { n: 24, col: rar.color });
+    openSheet({ title: (cr.rarity === 'legendary' ? '✨ A legendary friend!' : '✨ A rare friend!'), kind: 'meet', live: false, anim: animatePortraits, render: function () {
+      return '<div style="text-align:center"><canvas class="cv" style="width:150px;height:150px" data-critter="' + id + '" data-anim="1"></canvas><h3 style="margin:0">' + esc(cr.name) + ' ' + critterPill(cr) + '</h3><p class="mut" style="margin:2px 0">' + esc(cr.species) + ' · ' + esc(cr.trait) + '</p></div>'
+        + '<div class="card col"><p style="margin:0">"' + esc(cr.quote) + '"</p></div><p style="text-align:center;margin:4px 0">+' + fmtN(r.acorns) + ' 🌰' + (r.berries ? ' +' + r.berries + ' 🫐' : '') + ' · ' + (r.moved ? '🏠 moved into your ' + esc(D.ROOM_BY_ID[cr.room].name) : 'would love a ' + esc(D.ROOM_BY_ID[cr.room].name)) + '</p>'
+        + '<p class="mut" style="text-align:center;margin:2px 0">📖 Album ' + nudge.count + ' / ' + nudge.total + (nudge.next ? ' · ' + nudge.next.need + ' more for 🫐' + nudge.next.berries : '') + '</p><button class="btn gold" data-act="close">Wonderful</button>';
+    } });
+  }
+  /** residents wave when you come back after a while (skipped for sleepers and in calm mode) */
+  function greetAll() {
+    if (calm() || clock - lastGreet < 20) return; lastGreet = clock; var i = 0;
+    for (var id in actors) (function (a, delay) { setTimeout(function () { if (a.sleep) return; a.vh = 120; a.hop = .01; if (a.cx != null) fx('heart', cellX(a.cx) + a.x, cellY(a.cy) + CH - 40, { n: 1 }); }, delay); })(actors[id], 250 + (i++) * 140);
   }
 
   function watchAd(kind, done) {
@@ -491,18 +581,18 @@
     if (!found) return;
     if (found.kind === 'basket') doCollect(found.cx, found.cy);
     else if (found.kind === 'gift') actions.gift({ dataset: { x: found.cx, y: found.cy } });
-    else if (found.kind === 'critter') { var a = actors[found.id]; if (a) { a.vh = 120; a.hop = .01; } snd('critter' + (1 + Math.floor(Math.random() * 3)), { rate: .9 + Math.random() * .3 }); fx('heart', found.x + 14, found.y + 6, { n: 2 }); var cr = D.CRITTER_BY_ID[found.id]; if (Math.random() < .5) toast('<b>' + esc(cr.name) + '</b>: ' + esc(cr.quote)); }
+    else if (found.kind === 'critter') { var a = actors[found.id]; if (a) { a.vh = 120; a.hop = .01; a.awake = clock + 4; if (a.sleep) fx('float', found.x + 14, found.y, { ch: '?', col: '#fff', size: 12, vy: 14, life: 1.2 }); } snd('critter' + (1 + Math.floor(Math.random() * 3)), { rate: .9 + Math.random() * .3 }); fx('heart', found.x + 14, found.y + 6, { n: 2 }); var cr = D.CRITTER_BY_ID[found.id]; if (Math.random() < .5) toast('<b>' + esc(cr.name) + '</b>: ' + esc(cr.quote)); }
     else if (found.kind === 'door') { if (st.tut < 3) { toast('Not yet! Finish the first steps.'); return; } snd('tap'); setTab('door'); openSheet(doorSheet()); }
     else if (found.kind === 'cell') cellTap(found.cx, found.cy);
     else if (found.kind === 'room') { snd('tap'); setTab('burrow'); openSheet(roomSheet(found.cx, found.cy)); }
   }
   function cellTap(cx, cy) {
     var cell = S.cellAt(st, cx, cy), pend = st.digs.filter(function (d) { return d.x === cx && d.y === cy; })[0];
-    if (pend) { if (pend.end == null) { var r = S.tapDig(st, cx, cy, now()); snd('dig'); fx('dirt', cellX(cx) + 45, cellY(cy) + 70); if (r.done) { snd('dig-done'); fx('burst', cellX(cx) + 45, cellY(cy) + 44, { n: 18 }); dirtyUp(); handleEvents(S.tutorialAdvance(st, now())); save(); } } else openSheet(digSheet(cx, cy)); return; }
+    if (pend) { if (pend.end == null) { var r = S.tapDig(st, cx, cy, now()); snd('dig'); fx('dirt', cellX(cx) + 45, cellY(cy) + 70); shake = .5; if (r.done) { snd('dig-done'); fx('burst', cellX(cx) + 45, cellY(cy) + 44, { n: 18 }); dirtyUp(); handleEvents(S.tutorialAdvance(st, now())); save(); } } else openSheet(digSheet(cx, cy)); return; }
     if (cell && cell.dug && !cell.room) { if (st.tut === 0) return; snd('tap'); openSheet(buildSheet(cx, cy)); return; }
     if (!cell && S.canDigCell(st, cx, cy)) {
       var info = S.digInfo(st, cx, cy), sr = info.stratum;
-      if (info.tap && S.level(st) >= sr.level && st.digs.length < S.maxDigs(st)) { var r2 = S.startDig(st, cx, cy, now()); if (r2.ok) { S.tapDig(st, cx, cy, now()); snd('dig'); fx('dirt', cellX(cx) + 45, cellY(cy) + 70); dirtyUp(); } return; }
+      if (info.tap && S.level(st) >= sr.level && st.digs.length < S.maxDigs(st)) { var r2 = S.startDig(st, cx, cy, now()); if (r2.ok) { S.tapDig(st, cx, cy, now()); shake = .5; snd('dig'); fx('dirt', cellX(cx) + 45, cellY(cy) + 70); dirtyUp(); } return; }
       snd('tap'); openSheet(digSheet(cx, cy));
     }
   }
@@ -519,7 +609,7 @@
   function save() { if (!st) return; st.lastSeen = Math.max(st.lastSeen, now()); P.Store.write(S.serialize(st)); dirty = false; lastSave = clock; if (st.settings.notifications && P.Notify.supported) P.Notify.schedule(REM.plan(st, now())); }
   doc.addEventListener('visibilitychange', function () {
     if (doc.hidden) { save(); AU.pause(); }
-    else { AU.resume(); if (st) { var before = st.lastSeen; var ev = S.tick(st, now()); handleEvents(ev); maybeWelcome(before); } }
+    else { AU.resume(); if (st) { var before = st.lastSeen; var ev = S.tick(st, now()); handleEvents(ev); maybeWelcome(before); if (now() - before > 10 * 60000) setTimeout(greetAll, 700); } }
   });
   root.addEventListener('pagehide', save);
 
@@ -529,6 +619,7 @@
     openSheet({ title: 'Welcome back!', kind: 'welcome', live: false, render: function () {
       var tr = totalReady(), html = '<p style="margin:0 0 6px">You were away for <b>' + fmtDur(gap) + '</b>. Your burrow kept busy:</p>';
       html += '<div class="card col">' + (tr.goods ? '<div class="row sp"><span>' + ic('basket') + ' Baskets waiting</span><b>' + fmtN(tr.goods) + ' goods · ' + fmtN(tr.acorns) + ' 🌰</b></div>' : '') + (st.visitors.length ? '<div class="row sp"><span>🚪 Friends at the door</span><b>' + st.visitors.length + '</b></div>' : '') + (tr.gifts ? '<div class="row sp"><span>🎁 Gifts</span><b>' + tr.gifts + '</b></div>' : '') + (sum.full ? '<p class="mut" style="margin:0">' + sum.full + ' basket' + (sum.full > 1 ? 's are' : ' is') + ' full: that is all they hold.</p>' : '') + '</div>';
+      var tl = teaserLine(now()); if (tl) html += '<p class="mut" style="margin:6px 0 0">Next: ' + tl + '</p>';
       html += '<div class="row"><button class="btn gold" data-act="welcome-collect">' + ic('basket') + ' Collect all</button>' + (st.visitors.length ? '<button class="btn plain" data-act="welcome-door">Open the door</button>' : '') + '</div>';
       return html;
     } });
@@ -556,10 +647,10 @@
       if (needIntro) { $('intro').classList.remove('hidden'); introArt(); } else st.settings.introSeen = true;
       $('intro-go').onclick = function () { AU.unlock(); snd('chime'); $('intro').classList.add('hidden'); st.settings.introSeen = true; dirtyUp(); save(); };
       if (!needIntro) root.addEventListener('pointerdown', function once() { AU.unlock(); root.removeEventListener('pointerdown', once); });
-      if (!fresh) setTimeout(function () { if (!sheet && !introOpen()) { maybeWelcome(before); if (!sheet && st.tut >= 5 && S.dailyAvailable(st, now())) { setTab('door'); openSheet(doorSheet()); } } }, 500);
+      if (!fresh) setTimeout(function () { greetAll(); if (!sheet && !introOpen()) { maybeWelcome(before); if (!sheet && st.tut >= 5 && S.dailyAvailable(st, now())) { setTab('door'); openSheet(doorSheet()); } } }, 500);
       (doc.fonts && doc.fonts.load ? Promise.all([doc.fonts.load('600 12px Fredoka'), doc.fonts.load('400 20px "Lilita One"')]) : Promise.resolve()).catch(function () {}).then(function () { root.requestAnimationFrame(frame); });
       setInterval(function () { if (dirty) save(); }, 10000);
-      root.PB = { state: function () { return st; }, S: S, D: D, now: now, advance: function (ms) { timeOffset += ms; var e2 = S.tick(st, now()); handleEvents(e2); refreshHud(); return e2; }, save: save, tap: tap, hits: function () { return hits; }, cellTap: cellTap, openSheet: openSheet, actions: actions, sheet: function () { return sheet; }, collectAll: collectAllNow, view: view, cellCenter: function (x, y) { return { x: cellX(x) + CW / 2, y: cellY(y) + CH / 2 }; }, doorSheet: doorSheet, albumSheet: albumSheet, nookSheet: nookSheet, settingsSheet: settingsSheet, roomSheet: roomSheet, buildSheet: buildSheet, scrollTo: scrollTo, ready: true };
+      root.PB = { state: function () { return st; }, S: S, D: D, now: now, advance: function (ms) { timeOffset += ms; var e2 = S.tick(st, now()); handleEvents(e2); refreshHud(); return e2; }, save: save, tap: tap, hits: function () { return hits; }, cellTap: cellTap, openSheet: openSheet, actions: actions, sheet: function () { return sheet; }, collectAll: collectAllNow, view: view, cellCenter: function (x, y) { return { x: cellX(x) + CW / 2, y: cellY(y) + CH / 2 }; }, friendCard: friendCard, meetCard: meetCard, greetAll: greetAll, whenLabel: whenLabel, doorSheet: doorSheet, albumSheet: albumSheet, nookSheet: nookSheet, settingsSheet: settingsSheet, roomSheet: roomSheet, buildSheet: buildSheet, scrollTo: scrollTo, ready: true };
     });
   }
   function introArt() {

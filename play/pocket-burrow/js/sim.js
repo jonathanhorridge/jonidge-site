@@ -351,15 +351,29 @@
     eachRoom(s, function (r, x, y) { var o = collect(s, x, y, now); if (o.ok) { tot.goods[o.good] = (tot.goods[o.good] || 0) + o.goods; tot.acorns += o.acorns; tot.rooms++; } });
     return tot;
   }
+  function heartLevel(hearts) { var n = 0; D.FRIENDSHIP.hearts.forEach(function (h) { if (hearts >= h) n++; }); return n; }
+  function storyLine(cid, lvl) { var c = D.CRITTER_BY_ID[cid], arr = D.STORIES[c.room] || []; return (arr[lvl - 1] || '').replace('{n}', c.name); }
   function collectGift(s, x, y, now) {
     var c = cellAt(s, x, y); if (!c || !c.room || !c.room.giftReady) return { ok: false };
     var r = c.room, def = D.ROOM_BY_ID[r.id], best = 'common', order = ['common', 'uncommon', 'rare', 'legendary'];
     r.critters.forEach(function (cid) { var q = D.CRITTER_BY_ID[cid].rarity; if (order.indexOf(q) > order.indexOf(best)) best = q; });
     var acorns = Math.max(5, Math.round(roomRate(r) * D.GOODS[def.good].value * D.GIFTS.acornHours));
     var berries = rand(s) < D.GIFTS.berryChance[best] ? 1 : 0;
+    // the resident with the fewest hearts hands it over, so everybody gets to know you
+    var who = null, low = 1e9; r.critters.forEach(function (cid) { var h = (s.album[cid] && s.album[cid].hearts) || 0; if (h < low) { low = h; who = cid; } });
+    var out = { ok: true, acorns: acorns, berries: berries, critter: who };
+    if (who) {
+      var a = s.album[who]; var before = heartLevel(a.hearts || 0); a.hearts = (a.hearts || 0) + 1; var lvl = heartLevel(a.hearts);
+      out.hearts = a.hearts; out.level = lvl; out.nextAt = D.FRIENDSHIP.hearts[lvl] || null;
+      if (lvl > before) {
+        var rw = D.FRIENDSHIP.rewards[lvl - 1], ra = Math.round(roomRate(r) * D.GOODS[def.good].value * rw.acornHours);
+        acorns += ra; berries += rw.berries || 0; out.acorns = acorns; out.berries = berries;
+        out.levelUp = { level: lvl, name: D.FRIENDSHIP.names[lvl], acorns: ra, berries: rw.berries || 0, story: storyLine(who, lvl) };
+      }
+    }
     s.acorns += acorns; s.berries += berries; s.stats.acornsEarned += acorns;
     r.giftReady = false; r.giftAt = now + D.GIFTS.everyHours * HOUR;
-    return { ok: true, acorns: acorns, berries: berries, critter: r.critters[Math.floor(rand(s) * r.critters.length)] };
+    return out;
   }
 
   // ---------- daily calendar ----------
@@ -478,6 +492,50 @@
     if (!isFinite(o.lastSeen)) o.lastSeen = now;
     return o;
   }
+
+  // ---------- retention helpers: "come back at ..." teasers, rare-guest anticipation, album nudge (all pure) ----------
+  function quietDays(s, now) { return Math.max(0, Math.round((localMidnight(now) - localMidnight(new Date(s.vis.lastRareDay + 'T12:00:00').getTime())) / DAY)); }
+  /** Chance and pity for tonight's late visitor. teaseNow: show the "something sparkly is coming" lantern at the door. */
+  function rareHint(s, now) {
+    var q = quietDays(s, now), guaranteed = q >= D.VISITORS.rarePityDays, tonight = atHour(now, D.VISITORS.nightHour);
+    var pending = now < tonight && s.vis.lastSlot < tonight;
+    var h = new Date(now).getHours() + new Date(now).getMinutes() / 60;
+    return { chance: D.VISITORS.nightRareChance, quietDays: q, pityDays: D.VISITORS.rarePityDays, guaranteed: guaranteed, nextAt: pending ? tonight : tonight + DAY, tonight: pending,
+             teaseNow: !!(guaranteed && pending && h >= 15 && s.tut >= 5), unlocked: level(s) >= 3 };
+  }
+  function nextVisitorSlot(s, now) {
+    var hours = D.VISITORS.slotHours; if (s.tut < 5) return null;
+    for (var day = 0; day <= 1; day++) for (var i = 0; i < hours.length; i++) { var t = atHour(now + day * DAY, hours[i]); if (t > now) return { at: t, hour: hours[i], full: s.visitors.length >= D.VISITORS.maxWaiting }; }
+    return null;
+  }
+  function tomorrowGift(s, now) { var idx = s.daily.index % D.DAILY.length; return { today: dailyAvailable(s, now), day: idx + 1, reward: D.DAILY[idx] }; }
+  /** Everything the player has a reason to come back for, soonest first. */
+  function nextUps(s, now) {
+    var out = [], ns = s.tut >= 3;
+    var v = nextVisitorSlot(s, now); if (v && !v.full) out.push({ kind: 'visitor', at: v.at, text: 'A friend drops by' });
+    var rh = rareHint(s, now); if (s.tut >= 5 && rh.unlocked && (rh.guaranteed || rh.tonight)) out.push({ kind: 'rare', at: rh.nextAt, text: rh.guaranteed ? 'A rare guest is due tonight' : 'A chance of a rare late guest', guaranteed: rh.guaranteed });
+    var bf = null; eachRoom(s, function (r) { var tf = timeToFull(r, now); if (tf > 0 && (!bf || tf < bf.tf)) bf = { tf: tf, id: r.id }; });
+    if (bf && ns) out.push({ kind: 'basket', at: now + bf.tf, text: 'The ' + D.ROOM_BY_ID[bf.id].name + ' basket is full' });
+    var dg = null; s.digs.forEach(function (d) { if (d.end && (!dg || d.end < dg)) dg = d.end; }); if (dg) out.push({ kind: 'dig', at: dg, text: 'Your new tunnel is ready' });
+    var gf = null; eachRoom(s, function (r) { if (r.critters.length && r.giftAt != null && !r.giftReady && (!gf || r.giftAt < gf.at)) gf = { at: r.giftAt, id: r.id }; });
+    if (gf && ns) out.push({ kind: 'gift', at: gf.at, text: 'A gift from the ' + D.ROOM_BY_ID[gf.id].name });
+    if (s.tut >= 5 && !dailyAvailable(s, now)) out.push({ kind: 'daily', at: localMidnight(now) + DAY + 8 * HOUR, text: 'Tomorrow\'s visit gift' });
+    out.sort(function (a, b) { return a.at - b.at; });
+    return out;
+  }
+  /** one friendly line for the end of a session */
+  function comeBack(s, now) {
+    var ups = nextUps(s, now).filter(function (u) { return u.at - now > 20 * 60000 && u.kind !== 'daily'; });
+    return ups[0] || null;
+  }
+  function albumNudge(s) {
+    var n = albumCount(s), next = D.ALBUM_REWARDS.filter(function (m) { return !s.albumClaimed[m.at] && m.at > n; })[0] || null;
+    var ready = D.ALBUM_REWARDS.filter(function (m) { return n >= m.at && !s.albumClaimed[m.at]; }).length;
+    return { count: n, total: D.CRITTERS.length, next: next && { at: next.at, need: next.at - n, berries: next.berries, acorns: next.acorns || 0 }, ready: ready };
+  }
+  /** unmet critters whose room you already own: the ones most likely to knock next */
+  function hopefuls(s) { return D.CRITTERS.filter(function (c) { return !s.album[c.id] && hasRoom(s, c.room); }); }
+
   /** What waits for the player after being away: used by the welcome-back card. */
   function awaySummary(s, now, events) {
     var goods = 0, acorns = 0, rooms = 0, full = 0, gifts = 0;
@@ -502,6 +560,6 @@
     fulfillVisitor: fulfillVisitor, dismissVisitor: dismissVisitor, visitorById: visitorById, summonVisitor: summonVisitor, moveIn: moveIn, settleFriends: settleFriends,
     dailyAvailable: dailyAvailable, claimDaily: claimDaily, buyDecor: buyDecor, toggleDecor: toggleDecor, claimSeasonGift: claimSeasonGift, grantSupporter: grantSupporter,
     albumCount: albumCount, albumMilestones: albumMilestones, claimAlbum: claimAlbum, adReward: adReward, adsLeft: adsLeft, tutorialAdvance: tutorialAdvance,
-    serialize: serialize, deserialize: deserialize, awaySummary: awaySummary, neighbors: neighbors
+    serialize: serialize, deserialize: deserialize, awaySummary: awaySummary, heartLevel: heartLevel, storyLine: storyLine, rareHint: rareHint, nextVisitorSlot: nextVisitorSlot, tomorrowGift: tomorrowGift, nextUps: nextUps, comeBack: comeBack, albumNudge: albumNudge, hopefuls: hopefuls, neighbors: neighbors
   };
 });

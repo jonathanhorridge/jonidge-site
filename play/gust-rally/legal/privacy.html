@@ -1,0 +1,97 @@
+<!doctype html><html lang="en"><head>
+<!-- jonidge-play-gate -->
+<meta name="robots" content="noindex,nofollow">
+<style id="jonidge-gate-css">html{visibility:hidden!important}</style>
+<script>
+(function(){
+  try {
+    var t = localStorage.getItem("jonidge-play-v1") || "";
+    if (!/^v1\.[0-9a-f]{128}$/i.test(t)) {
+      location.replace("/play/");
+      return;
+    }
+    var s = document.getElementById("jonidge-gate-css");
+    if (s) s.remove();
+  } catch (e) {
+    location.replace("/play/");
+  }
+})();
+</script>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Gust Rally – Privacy Policy</title><style>body{font:16px/1.55 -apple-system,Segoe UI,Roboto,sans-serif;max-width:760px;margin:2rem auto;padding:0 1rem;color:#222}table{border-collapse:collapse;width:100%;font-size:14px}td,th{border:1px solid #ddd;padding:6px;vertical-align:top}h1{color:#2a7de1}nav a{margin-right:.8rem}nav{margin-bottom:1.2rem;line-height:1.8}ul.pages{padding-left:1.2rem}</style></head><body><nav><a href="privacy.html">Privacy</a><a href="terms.html">Terms</a><a href="support.html">Support</a><a href="data-deletion.html">Delete data</a></nav><h1>Gust Rally Privacy Policy</h1>
+<p>Effective date: 2026-11-28<br />Last updated: 2026-11-28</p>
+<p>This policy explains what personal data is processed when you play <strong>Gust Rally</strong> (the "App") on Android, iOS or in a web browser, why, and what your choices are. We wrote it to be short and plain. If anything is unclear, write to us at the address in section 1.</p>
+<h2>The short version</h2>
+<ul>
+<li>You don't create an account. We don't ask for your name, email, phone number, contacts, photos or precise location.</li>
+<li>Your progress, Breeze, cosmetics, streak, quests and settings are stored <strong>on your device</strong>.</li>
+<li>If you use the <strong>online daily leaderboard and ghost races</strong> (optional, only when it is switched on in your version), the App creates a random player ID and a generated display name (for example "Swift Plover 42") and sends them to our server together with your daily run (the sequence of touches and your time). No email, no real name, no device or advertising ID.</li>
+<li>If <strong>rewarded ads</strong> are switched on in your version, they are optional "watch to double your Breeze" ads from Google AdMob. Where the law requires it (for example in the EU, EEA, UK and Switzerland) you are asked for consent first.</li>
+<li>Optional <strong>cosmetic purchases</strong> are processed by Apple or Google. We never see your card or bank details.</li>
+<li>We do not sell your personal data for money, and we do not use analytics or crash-reporting SDKs of our own.</li>
+</ul>
+<h2 id="1">1. Who is responsible (controller)</h2>
+<p>The controller responsible for the App is:</p>
+<p>Jonidge (independent developer)<br />
+Switzerland<br />
+Email: jonidge@yahoo.com</p>
+<p>We have not appointed a data protection officer, because we are not required to.</p>
+<h2>2. What data is processed, why, and on what legal basis</h2>
+<h3>2.1 Game data stored on your device</h3>
+<table><tr><th>What</th><th>Why</th><th>Where</th></tr>
+<tr><td>Best runs and ghosts, daily results and streak, streak freezes, daily quest progress, Breeze balance, owned and equipped cosmetics, settings (sound, music, haptics, reduced motion), rewarded-ad counter for the day</td><td>To run the game</td><td>Only on your device (app storage; in the app we use the operating system's preferences storage). It is not sent to us, except the run data described in 2.2.</td></tr></table>
+<p>Because this data stays on your device, we cannot see, restore or delete it for you. If you uninstall the App or clear its data, your progress and cosmetics are lost (purchases can be restored where the store supports it). Legal basis: performance of the contract with you (GDPR Art. 6(1)(b)).</p>
+<h3>2.2 Online daily leaderboard and ghost races (optional)</h3>
+<p>When this feature is on, the App talks to our server (a Cloudflare Worker with a Cloudflare D1 database). It processes:</p>
+<ul>
+<li>a <strong>random player ID</strong> and a secret token (only a hash of the token is stored), created by the App, not linked to your name or email;</li>
+<li>a <strong>generated display name</strong> (you can change it; names are filtered) and a <strong>friend code</strong> so friends can follow you;</li>
+<li>your <strong>daily run</strong>: the day, your time and the log of when you pressed and released (this is your "ghost", about 1 KB), which other players may race against and which shows your display name on the leaderboard;</li>
+<li>who you follow by friend code;</li>
+<li>short-lived technical counters used to prevent abuse (rate limits). They expire within about an hour; the network address is only used as a salted hash for this purpose.</li>
+</ul>
+<p>We do not store your IP address, location, email, device ID or advertising ID for this feature. Purposes: running the leaderboard and ghosts, preventing cheating and abuse. Legal basis: performance of the contract (Art. 6(1)(b)) and our legitimate interest in a fair leaderboard (Art. 6(1)(f)). You can use the App without it: play stays fully offline.</p>
+<p>Cloudflare, Inc. (USA) is our hosting provider and processes this data on our behalf (see sections 3 and 4). Cloudflare also processes network addresses as part of delivering traffic, under its own privacy terms: https://www.cloudflare.com/privacypolicy/</p>
+<h3>2.3 Advertising (Google AdMob), only if switched on</h3>
+<p>The App may offer <strong>optional rewarded video ads</strong> ("watch a short ad to double the Breeze from your run"). Ads are always your choice, never required to play, and capped per day. When ads are on, they are served by <strong>Google AdMob</strong>, provided by Google Ireland Limited (for users in the EEA, UK and Switzerland) and Google LLC (elsewhere). When an ad is requested, the Google Mobile Ads SDK collects and sends to Google device identifiers (such as the advertising ID where available and allowed), your IP address (approximate location), ad and app interaction data, diagnostics and basic device information. Where the law requires it, the App first shows Google's consent message (User Messaging Platform) and only personalises ads if you agree; you can change your choice at any time in Settings. On iOS the advertising ID is only accessed if you allow it in Apple's tracking prompt.</p>
+<p>Legal basis: your consent (Art. 6(1)(a), ePrivacy rules) for personalised ads and identifiers; otherwise our legitimate interest in financing a free app and preventing ad fraud (Art. 6(1)(f)). Google acts as an independent controller: https://policies.google.com/privacy and https://policies.google.com/technologies/partner-sites. In versions where ads are switched off, no ad data is collected.</p>
+<h3>2.4 Purchases (Apple App Store, Google Play, RevenueCat), only if switched on</h3>
+<p>Optional cosmetic purchases (for example a "Sky Pack" of kite, tail and trail) are paid <strong>only through Apple's App Store or Google Play billing</strong>. Apple or Google processes your payment as an independent controller; we never receive your card number, bank details or billing address. To deliver and verify purchases we receive from the store, and process via <strong>RevenueCat, Inc.</strong> (USA, our processor): a random anonymous app user ID, purchase records (product, price, currency, store country, date, transaction ID, receipt or purchase token, refund status) and basic technical data (app version, operating system, device type, locale). The stores also give us sales reports for accounting and tax. Purposes: delivering what you bought, restoring purchases, fraud prevention, refunds, support, bookkeeping. Legal basis: contract (Art. 6(1)(b)), legal obligations (Art. 6(1)(c)), fraud prevention (Art. 6(1)(f)). RevenueCat privacy policy: https://www.revenuecat.com/privacy</p>
+<h3>2.5 Consent records</h3>
+<p>If ads are on, your privacy choices (for example the IAB TCF consent string) are stored on your device by Google's User Messaging Platform so the App can respect them. Legal basis: legal obligation to obtain and document consent (Art. 6(1)(c), Art. 7(1)).</p>
+<h3>2.6 Support emails</h3>
+<p>If you email us, we process your email address, your message and anything you attach to answer you. Legal basis: our legitimate interest in answering you (Art. 6(1)(f)) or performance of contract where it is about a purchase (Art. 6(1)(b)). Our support mailbox is a Yahoo Mail account provided by Yahoo International Limited (The EXO Building, North Wall Quay, Dublin 1, Ireland), which stores your emails for us. Yahoo may process data in other countries (including the US) under the EU Standard Contractual Clauses (https://legal.yahoo.com/ie/en/yahoo/privacy/index.html).</p>
+<h3>2.7 Sharing your result</h3>
+<p>If you tap <strong>Share</strong>, the App opens your device's share sheet or copies text (for example "Gust Rally 2026-11-28 1:08.40") to your clipboard. You decide where to send it. The App does not send this to us.</p>
+<h3>2.8 What we do not do</h3>
+<p>We do not use analytics or crash-reporting SDKs of our own, do not collect precise (GPS) location, contacts, photos, microphone or camera data, have no user accounts with emails or passwords and no chat, and do not make decisions with legal effects about you by automated means. Haptics (vibration) are produced locally on your device and send no data.</p>
+<h2>3. Recipients</h2>
+<ul>
+<li>Cloudflare, Inc. (hosting of the optional leaderboard server, processor).</li>
+<li>Google (AdMob, User Messaging Platform), only if ads are on.</li>
+<li>Apple and Google for payments and app distribution; RevenueCat, Inc. (processor) for purchase verification, only if purchases are on.</li>
+<li>Yahoo International Limited, Ireland (Yahoo Mail) for our support mailbox.</li>
+<li>Authorities, courts or advisers, only where required by law or to defend legal claims.</li>
+</ul>
+<h2>4. International transfers</h2>
+<p>Some recipients are located in, or access data from, the United States and other countries. Switzerland and the EU recognise the US as adequate for companies certified under the EU-US / Swiss-US Data Privacy Framework (Google LLC and Cloudflare are certified). For any recipient that is not certified, transfers are based on the EU Standard Contractual Clauses (with the Swiss addendum) in the provider's data processing terms. You can ask us for a copy of the relevant safeguards.</p>
+<h2>5. How long data is kept</h2>
+<table><tr><th>Data</th><th>Kept</th></tr>
+<tr><td>Game data on your device</td><td>Until you delete the App's data or uninstall</td></tr>
+<tr><td>Online runs / ghosts</td><td>45 days, then deleted automatically</td></tr>
+<tr><td>Online player record (random ID, display name, friend code)</td><td>Deleted automatically after 60 days without a run, or immediately when you delete it (see Delete data)</td></tr>
+<tr><td>Abuse-prevention counters</td><td>About one hour</td></tr>
+<tr><td>Purchase records (RevenueCat, store reports)</td><td>As long as needed to deliver and restore purchases, then up to 10 years where Swiss bookkeeping law (Art. 958f CO) requires it</td></tr>
+<tr><td>Support emails</td><td>Up to 2 years after your request is closed, unless needed longer for a legal claim</td></tr>
+<tr><td>Ad data held by Google</td><td>According to Google's retention policies (https://policies.google.com/technologies/retention)</td></tr></table>
+<h2>6. Children</h2>
+<p>Gust Rally is a general-audience game and is not directed at children under 13. We do not knowingly collect personal data from children. Because the optional online features use only a random ID and a generated name, no personal details are needed to play. Ads, where switched on, are limited to General-audience content, and where a store tells us the user is a minor or child, ads are not personalised. Parents can manage purchases with Apple's Screen Time / Ask to Buy and Google Play's Family Link. If you believe a child has sent us personal data, email jonidge@yahoo.com and we will delete it.</p>
+<h2>7. Security</h2>
+<p>Connections to our server use HTTPS. Player tokens are stored only as a hash. We keep as little data as possible. No system is perfectly secure, but we take reasonable technical and organisational measures.</p>
+<h2>8. Your rights</h2>
+<p>Under the GDPR, UK GDPR and the Swiss data protection act you can ask for access, correction, deletion, restriction, portability, and object to processing, and withdraw consent at any time (this does not affect earlier processing). Because most data stays on your device you can delete it yourself, and online data can be deleted in the App (Settings) or by email: see <a href="data-deletion.html">Delete data</a>. Contact us at jonidge@yahoo.com. You can also complain to your data protection authority; in Switzerland that is the Federal Data Protection and Information Commissioner (FDPIC).</p>
+<h2>9. Notice for US residents (California and other states)</h2>
+<p>We do not sell your personal information for money. Where ads are on, Google's use of identifiers to personalise ads may count as "sharing" or "selling" under some state laws; you can opt out in the App's privacy settings or in your device's ad settings, or email jonidge@yahoo.com. Categories processed in the last 12 months: identifiers (random player ID, advertising ID where ads are on, IP address via our hosting provider's network), commercial information (purchase records where purchases are on), internet activity (ad interactions where ads are on). We do not collect sensitive personal information. We do not discriminate against you for exercising your rights.</p>
+<h2>10. Changes</h2>
+<p>We may update this policy when the App or the law changes. The date at the top shows the latest version. For important changes we will tell you in the App before they apply.</p>
+<h2>11. Contact</h2>
+<p>Jonidge, Switzerland. Email: jonidge@yahoo.com</p></body></html>

@@ -54,11 +54,12 @@
         '<div class="next" id="next"></div>' +
       '</div>' +
       '<div class="card quests"><div class="qhead"><b>Daily quests</b><span class="breeze">🌬️ ' + D.breeze + '</span></div><div id="quests">' + questsHtml() + '</div></div>' +
-      '<div class="row2"><button class="btn" id="b-practice">Practice (random course)</button></div>' +
+      '<div class="row2"><button class="btn" id="b-practice">Practice</button><button class="btn" id="b-locker">🪁 Locker</button></div>' +
       '<footer>' + C.brand + ' · prototype v' + C.version + '</footer>';
     $('b-daily').onclick = function () { tap(); mode = 'daily'; play(seed); };
     $('b-practice').onclick = function () { tap(); mode = 'practice'; play('practice-' + Math.floor(Math.random() * 1e9)); };
     $('b-settings').onclick = function () { tap(); settings(); };
+    $('b-locker').onclick = function () { tap(); locker(); };
     $('quests').onclick = function (e) {
       var id = e.target.getAttribute && e.target.getAttribute('data-claim'); if (!id) return;
       var r = Store.claimQuest(id); if (r) { Sfx.unlock(); Sfx.play('ring', 0.8); home(); }
@@ -78,9 +79,12 @@
     function row(key, label, val) { return '<label class="set"><span>' + label + '</span><input type="checkbox" data-k="' + key + '"' + (val ? ' checked' : '') + '><i class="sw"></i></label>'; }
     m.innerHTML = '<div class="card"><h2>Settings</h2>' + row('sfx', 'Sound effects', cfg().sfx) + row('music', 'Music', cfg().music) +
       row('haptics', 'Haptics (vibration)', cfg().haptics) + row('reduced', 'Reduced motion (no shake or flashes)', reduced()) +
+      '<p class="fine"><a href="legal/privacy.html" target="_blank" rel="noopener">Privacy Policy</a> · <a href="legal/terms.html" target="_blank" rel="noopener">Terms</a> · <a href="legal/data-deletion.html" target="_blank" rel="noopener">Delete data</a></p>' +
+      (root.KCOnline && root.KCOnline.enabled() ? '<button class="btn mini" id="b-delonline">Delete my online data</button>' : '') +
       '<p class="fine">Contact: ' + C.supportEmail + '</p><button class="btn primary" id="b-close">Done</button></div>';
     document.body.appendChild(m);
     m.addEventListener('change', function (e) { var k = e.target.getAttribute('data-k'); if (!k) return; Store.set(k, e.target.checked); applyAudio(); if (k === 'haptics' && e.target.checked) haptic('hit'); });
+    var del = $('b-delonline'); if (del) del.onclick = function () { root.KCOnline.deleteAccount().then(function () { del.textContent = 'Online data deleted'; del.disabled = true; }).catch(function () { del.textContent = 'Could not reach the server, try again later'; }); };
     $('b-close').onclick = function () { m.remove(); Sfx.play('click', 0.5); };
   }
 
@@ -93,7 +97,7 @@
     Store.ghostsFor(sd).then(function (gs) {
       game = new root.KCGame(canvas, {
         course: c, ghost: gs[0] || null, autopilot: params.get('autopilot') === '1', timeScale: +params.get('ts') || 1,
-        reduced: reduced(), haptics: cfg().haptics, onHaptic: haptic,
+        reduced: reduced(), haptics: cfg().haptics, onHaptic: haptic, loadout: Store.loadout(),
         onCount: function (n) { Sfx.play(n ? 'count' : 'go', 0.7); },
         onFinish: function (r) { results(c, r); }
       });
@@ -124,9 +128,10 @@
         (daily ? '<div class="sub">🔥 ' + Store.data.streak + '-day streak</div>' : '<div class="sub">Practice runs don\u2019t count for the daily streak</div>') +
         (nDone ? '<div class="sub good">🎯 ' + nDone + ' quest' + (nDone > 1 ? 's' : '') + ' ready to claim on Home</div>' : '') +
         '<button class="btn primary" id="b-again">Fly again</button>' +
-        '<button class="btn ghosty" id="b-ad" disabled title="Rewarded ads are off in the prototype">▶ Double Breeze (ad, coming soon)</button>' +
+        adButtonHtml(earned) +
         '<div class="row2"><button class="btn" id="b-share">Share</button><button class="btn" id="b-home2">Home</button></div>' +
       '</div>';
+    wireAd(earned);
     $('b-again').onclick = function () { tap(); play(c.seed); };
     $('b-home2').onclick = function () { tap(); home(); };
     $('b-share').onclick = function () {
@@ -134,6 +139,69 @@
       if (N && N.isNative) N.Share.share({ text: txt }).catch(function () {});
       else if (navigator.share) navigator.share({ text: txt }).catch(function () {}); else if (navigator.clipboard) navigator.clipboard.writeText(txt).then(function () { $('b-share').textContent = 'Copied!'; });
     };
+  }
+
+  // ---------- rewarded ad: optional "double Breeze" (disabled unless KC_CONFIG.ads.mode is on) ----------
+  function adButtonHtml(earned) {
+    if (!Ads.available() || Store.adsLeft() <= 0) return '<button class="btn ghosty" id="b-ad" disabled>▶ Double Breeze (ads are off)</button>';
+    return '<button class="btn ghosty on" id="b-ad">▶ Watch a short ad: +' + earned + ' 🌬️ Breeze (' + Store.adsLeft() + ' left today)</button>';
+  }
+  function wireAd(earned) {
+    var b = $('b-ad'); if (!b || b.disabled) return;
+    b.onclick = function () {
+      b.disabled = true; Sfx.unlock();
+      Ads.showRewarded('double_breeze', fakeAd).then(function (ok) {
+        if (ok) { Store.noteAd(); Store.addBreeze(earned); b.textContent = '✓ +' + earned + ' 🌬️ Breeze added'; Sfx.play('ring', 0.8); }
+        else b.textContent = 'No ad available right now';
+      });
+    };
+  }
+  /** Placeholder shown only in the browser test mode (?ads=mock). */
+  function fakeAd() {
+    return new Promise(function (res) {
+      var m = document.createElement('div'); m.className = 'modal'; m.innerHTML = '<div class="card"><h2>Test ad</h2><p class="fine">Simulated rewarded ad (no real ad, nothing is requested).</p><button class="btn primary" id="b-fakeclose">Close and claim reward</button></div>';
+      document.body.appendChild(m); $('b-fakeclose').onclick = function () { m.remove(); res(true); };
+    });
+  }
+
+  // ---------- locker (cosmetics shop) ----------
+  var lockerTab = 'kite', Cos = root.KCCos;
+  function locker() {
+    var m = document.createElement('div'); m.className = 'modal locker'; m.id = 'locker';
+    document.body.appendChild(m); var raf = 0, t0 = performance.now();
+    function slotItems() { return Cos[lockerTab.toUpperCase() + 'S']; }
+    function render() {
+      var L = Store.loadout(), items = slotItems();
+      m.innerHTML = '<div class="card"><div class="qhead"><h2>Locker</h2><span class="breeze">🌬️ ' + Store.data.breeze + '</span></div>' +
+        '<div class="tabs">' + ['kite', 'tail', 'trail'].map(function (k) { return '<button class="tab' + (k === lockerTab ? ' on' : '') + '" data-tab="' + k + '">' + (k === 'kite' ? 'Kites' : k === 'tail' ? 'Tails' : 'Trails') + '</button>'; }).join('') + '</div>' +
+        '<p class="fine">Cosmetics only. They never change how you fly. Earn Breeze by flying.</p>' +
+        '<div class="grid">' + items.map(function (it) {
+          var own = Store.owns(lockerTab, it.id), eq = L[lockerTab] === it.id, afford = Store.data.breeze >= it.price;
+          return '<div class="item' + (eq ? ' eq' : '') + '"><canvas width="240" height="150" data-prev="' + it.id + '"></canvas><b>' + esc(it.name) + '</b>' +
+            (eq ? '<span class="tag on">Equipped</span>' : own ? '<button class="btn mini" data-eq="' + it.id + '">Equip</button>' :
+              '<button class="btn mini buy" data-buy="' + it.id + '"' + (afford ? '' : ' disabled') + '>🌬️ ' + it.price + '</button>') + '</div>';
+        }).join('') + '</div>' + packHtml() + '<button class="btn primary" id="b-lclose">Done</button></div>';
+    }
+    function packHtml() {
+      if (!IAP.enabled()) return '';
+      return IAP.PACKS.map(function (p) { var owned = Store.data.packs[p.sku]; return '<div class="pack"><div><b>' + esc(p.name) + '</b><small>' + esc(p.blurb) + ' · cosmetic only, all items also earnable with Breeze</small></div>' +
+        (owned ? '<span class="tag on">Owned</span>' : '<button class="btn mini" data-pack="' + p.sku + '">' + (IAP.mode === 'mock' ? 'Test buy' : 'Buy') + '</button>') + '</div>'; }).join('');
+    }
+    function draw() {
+      var L = Store.loadout(), t = (performance.now() - t0) / 1000;
+      Array.prototype.forEach.call(m.querySelectorAll('canvas[data-prev]'), function (cv) { Cos.preview(cv, lockerTab, cv.getAttribute('data-prev'), L, t); });
+      raf = requestAnimationFrame(draw);
+    }
+    m.addEventListener('click', function (e) {
+      var t = e.target; if (!t.getAttribute) return;
+      var tab = t.getAttribute('data-tab'), eq = t.getAttribute('data-eq'), buy = t.getAttribute('data-buy'), pk = t.getAttribute('data-pack');
+      if (tab) { lockerTab = tab; Sfx.play('click', 0.5); render(); }
+      else if (eq) { Store.equip(lockerTab, eq); Sfx.unlock(); Sfx.play('click', 0.6); render(); }
+      else if (buy) { var r = Store.buy(lockerTab, buy); if (r === 'ok') { Sfx.unlock(); Sfx.play('ring', 0.8); Store.equip(lockerTab, buy); } render(); }
+      else if (pk) { var pack = IAP.PACKS.filter(function (x) { return x.sku === pk; })[0]; IAP.purchase(pack, function () { return root.confirm ? root.confirm('Test mode: pretend to buy ' + pack.name + '? Nothing is charged.') : true; }).then(function (r2) { if (r2.ok) { Store.grantItems(pack.items, pack.sku); Sfx.play('ring', 0.8); render(); } }); }
+      else if (t.id === 'b-lclose') { cancelAnimationFrame(raf); m.remove(); if (root.KC.bg) { /* idle kite keeps its old look until next visit */ } home(); }
+    });
+    render(); draw();
   }
 
   function stopGame() { if (game) { game.stop(); game = null; } }
@@ -152,13 +220,13 @@
 
   // idle background: an autopilot kite flies behind the home screen
   function idle() {
-    var bg = new root.KCGame(canvas, { course: S.generate(todaySeed()), autopilot: true, silent: true, reduced: reduced(), onFinish: function () {} });
+    var bg = new root.KCGame(canvas, { course: S.generate(todaySeed()), autopilot: true, silent: true, reduced: reduced(), loadout: Store.loadout(), onFinish: function () {} });
     bg.countdown = 0; bg._hud = function () {}; root.KC.bg = bg; bg.start();
   }
   root.KC = { home: home, play: play, store: Store, sim: S };
   var _home = home; home = function () { stopGame(); if (root.KC.bg) root.KC.bg.stop(); _home(); idle(); };
   var _play = play; play = function (sd) { if (root.KC.bg) { root.KC.bg.stop(); root.KC.bg = null; } _play(sd); };
   root.KC.home = home; root.KC.play = play;
-  applyAudio();
-  home();
+  // durable storage first (native Preferences -> localStorage mirror), then start
+  KCPlatform.whenReady(function () { Store.hydrate(); applyAudio(); Ads.start(); IAP.init(); home(); });
 })(this);

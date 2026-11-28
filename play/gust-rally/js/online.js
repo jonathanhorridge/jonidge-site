@@ -69,10 +69,18 @@
     return go().catch(function (e) { if (e && e.status === 401) { lsSet(PKEY, null); return go(); } throw e; });
   }
 
-  var courseCache = {};
+  // Offline retry: one pending run (the best one for the day), only valid on the same UTC day.
+  var QKEY = 'gustrally:pending';
+  function keepPending(body) { var q = lsGet(QKEY); if (!q || q.day !== body.day || body.timeMs < q.timeMs) lsSet(QKEY, body); }
+  function flushPending() {
+    var q = lsGet(QKEY); if (!q) return Promise.resolve();
+    if (q.day !== new Date().toISOString().slice(0, 10)) { lsSet(QKEY, null); return Promise.resolve(); }
+    return authed('POST', '/v1/runs', q).then(function () { lsSet(QKEY, null); }, function (e) { if (e && e.status) lsSet(QKEY, null); /* server answered (rejected): drop it; no status = still offline: keep */ });
+  }
+  var courseCache = {}, simRef = null;
   /** Turn a server ghost record into the {toggles, samples, every, time, meta} shape game.js replays, by re-simulating locally. */
   function ghostFromRemote(seed, r) {
-    var S = root.KCSim; if (!S) return null;
+    var S = simRef || root.KCSim; if (!S) return null;
     var toggles = decodeToggles(r.toggles); if (!toggles) return null;
     var course = courseCache[seed] || (courseCache[seed] = S.generate(seed));
     var s = S.newState(), rec = new S.Recorder(), ti = 0, hold = false;
@@ -87,17 +95,22 @@
   }
 
   return {
+    useSim: function (s) { simRef = s; }, // tests / non-browser hosts
     encodeToggles: encodeToggles, decodeToggles: decodeToggles, enabled: enabled, ghostFromRemote: ghostFromRemote,
     ensurePlayer: player,
     me: function () { return authed('GET', '/v1/me'); },
     setName: function (name) { return authed('PUT', '/v1/me', { name: name }).then(function (j) { var p = lsGet(PKEY); if (p) { p.name = j.name; lsSet(PKEY, p); } return j; }); },
     deleteAccount: function () { return authed('DELETE', '/v1/me').then(function (j) { lsSet(PKEY, null); return j; }); },
-    submitRun: function (day, ghost) { return authed('POST', '/v1/runs', { day: day, toggles: ghost.toggles, timeMs: Math.round(ghost.time * 1000) }); },
+    /** Submit a finished daily run. On a network failure (offline) the run is kept and retried by the next ghosts()/submitRun() call that same UTC day. */
+    submitRun: function (day, ghost) {
+      var body = { day: day, toggles: ghost.toggles, timeMs: Math.round(ghost.time * 1000) };
+      return flushPending().then(function () { return authed('POST', '/v1/runs', body); }).catch(function (e) { if (!e || !e.status) keepPending(body); throw e; });
+    },
     leaderboard: function (day, limit) { var p = lsGet(PKEY); return http('GET', '/v1/leaderboard?day=' + encodeURIComponent(day) + (limit ? '&limit=' + limit : ''), null, p && p.token); },
     /** Ghost list for a day, already converted to replayable ghosts: top, players just ahead of you, friends. */
     ghosts: function (day) {
       var seed = 'gustrally-' + day;
-      return authed('GET', '/v1/ghosts?day=' + encodeURIComponent(day)).then(function (j) { return (j.ghosts || []).map(function (r) { return ghostFromRemote(seed, r); }).filter(Boolean); });
+      return flushPending().then(function () { return authed('GET', '/v1/ghosts?day=' + encodeURIComponent(day)).then(function (j) { return (j.ghosts || []).map(function (r) { return ghostFromRemote(seed, r); }).filter(Boolean); }); });
     },
     friends: function (day) { return authed('GET', '/v1/friends' + (day ? '?day=' + encodeURIComponent(day) : '')); },
     addFriend: function (code) { return authed('POST', '/v1/friends', { code: code }); },

@@ -5,12 +5,13 @@
   else root.KCSim = factory();
 })(this, function () {
   'use strict';
-  var VERSION = 1;
+  var VERSION = 2;
   var DT = 1 / 60;
-  var W = { H: 900, CEIL: 40, GROUND: 820, KITE_R: 18 };
+  // Portrait-first playfield: tall (1500 units) so that a phone held upright is filled by the course itself.
+  var W = { H: 1500, CEIL: 40, GROUND: 1440, KITE_R: 20 };
   var P = {
-    G: 980, LIFT: 2600, VDRAG: 2.2, K: 0.42, CRUISE: 300, RELAX: 0.35,
-    VMIN: 150, VMAX: 780, VYMAX: 720, SKID: 300, RING_BOOST: 22, HIT_KEEP: 0.6, INVULN: 1.0
+    G: 1300, LIFT: 3450, VDRAG: 2.2, K: 0.34, CRUISE: 300, RELAX: 0.35,
+    VMIN: 150, VMAX: 780, VYMAX: 950, SKID: 300, RING_BOOST: 22, HIT_KEEP: 0.6, INVULN: 1.0
   };
 
   // ---------- RNG ----------
@@ -59,11 +60,11 @@
     }
     function rings(x0, yc, n, amp) {
       var ph = R(0, 6.28);
-      for (var i = 0; i < n; i++) F.push({ type: 'ring', x: x0 + i * 120, y: clamp(yc + Math.sin(ph + i * 0.7) * amp, top + 70, bot - 70), r: 34 });
-      return n * 120;
+      for (var i = 0; i < n; i++) F.push({ type: 'ring', x: x0 + i * 140, y: clamp(yc + Math.sin(ph + i * 0.7) * amp, top + 70, bot - 70), r: 38 });
+      return n * 140;
     }
     function bird(bx, by, d) {
-      F.push({ type: 'bird', x: bx, y: by, ax: R(10, 40), ay: R(40, 90 + 90 * d), f: R(1.2, 2.2 + d), ph: R(0, 6.28), r: 24 });
+      F.push({ type: 'bird', x: bx, y: by, ax: R(15, 60), ay: R(60, 140 + 140 * d), f: R(1.2, 2.2 + d), ph: R(0, 6.28), r: 24 });
     }
     var last = '';
     while (x < L - 1800) {
@@ -71,44 +72,44 @@
       var kind = choose(); if (kind === last && rnd() < 0.6) kind = choose(); last = kind;
       var len = 0;
       if (kind === 'rings') {
-        len = rings(x, R(top + 160, bot - 160), 5 + Math.floor(rnd() * 3), R(60, 180));
+        len = rings(x, R(top + 220, bot - 220), 5 + Math.floor(rnd() * 3), R(80, 260));
       } else if (kind === 'gust') {
-        var gy = R(top + 60, bot - 220), gl = R(900, 1600);
-        F.push({ type: 'gust', x0: x, x1: x + gl, y0: gy, y1: gy + 150, power: 360 });
-        if (rnd() < 0.7) rings(x + 200, gy + 75, 4, 20);
+        var gy = R(top + 60, bot - 330), gl = R(1000, 1700);
+        F.push({ type: 'gust', x0: x, x1: x + gl, y0: gy, y1: gy + 250, power: 360 });
+        if (rnd() < 0.7) rings(x + 200, gy + 125, 4, 30);
         len = gl;
       } else if (kind === 'head') {
         var high = rnd() < 0.5, hl = R(600, 1100), hh = span * R(0.4, 0.55);
         F.push({ type: 'gust', x0: x, x1: x + hl, y0: high ? top : bot - hh, y1: high ? top + hh : bot, power: -300 });
         len = hl;
       } else if (kind === 'updraft') {
-        var uw = R(130, 180);
-        F.push({ type: 'updraft', x0: x, x1: x + uw, top: R(top + 40, top + 220), power: R(1500, 1900) });
-        rings(x + uw + 160, R(top + 90, top + 200), 3, 30);
+        var uw = R(150, 210);
+        F.push({ type: 'updraft', x0: x, x1: x + uw, top: R(top + 60, top + 360), power: R(2100, 2600) });
+        rings(x + uw + 170, R(top + 120, top + 300), 3, 40);
         len = uw + 520;
       } else if (kind === 'flock') {
         var n = 1 + Math.floor(rnd() * (1 + d * 2.5));
-        var gapC = R(top + 160, bot - 160);
+        var gapC = R(top + 220, bot - 220);
         for (var i = 0; i < n; i++) {
-          var by; do { by = R(top + 60, bot - 60); } while (Math.abs(by - gapC) < span * 0.2);
+          var by; do { by = R(top + 80, bot - 80); } while (Math.abs(by - gapC) < span * 0.17);
           bird(x + i * R(90, 200), by, d);
         }
         len = n * 180 + 200;
       } else if (kind === 'storm') {
-        var sr = R(70, 95 + 30 * d), sy = R(top + 60 + sr * 0.5, top + 260);
+        var sr = R(80, 110 + 30 * d), sy = R(top + 80 + sr * 0.5, bot - 520);
         F.push({ type: 'storm', x: x + sr, y: sy, r: sr, period: R(2.2, 3.4 - d), phase: R(0, 3) });
         len = sr * 2 + 300;
       } else if (kind === 'combo') {
-        var cw = 150;
-        F.push({ type: 'updraft', x0: x, x1: x + cw, top: top + 60, power: 1700 });
-        var csr = R(70, 90);
-        F.push({ type: 'storm', x: x + cw + 420, y: R(top + 300, top + 420), r: csr, period: R(2.4, 3.2), phase: R(0, 3) });
-        rings(x + cw + 250, top + 130, 4, 15);
+        var cw = 170;
+        F.push({ type: 'updraft', x0: x, x1: x + cw, top: top + 80, power: 2400 });
+        var csr = R(80, 100);
+        F.push({ type: 'storm', x: x + cw + 460, y: R(top + 500, top + 760), r: csr, period: R(2.4, 3.2), phase: R(0, 3) });
+        rings(x + cw + 260, top + 200, 4, 20);
         len = cw + 700;
       }
-      x += len + R(140, 340) * (1.2 - d * 0.5);
+      x += len + R(180, 420) * (1.2 - d * 0.5);
     }
-    rings(L - 1300, R(300, 600), 6, 120);
+    rings(L - 1300, R(500, 1000), 6, 200);
     F.forEach(function (f) { if (f.x0 == null) { f.x0 = f.x - (f.r || 0) - 150; f.x1 = f.x + (f.r || 0) + 150; } });
     F.sort(function (a, b) { return a.x0 - b.x0; });
     F.forEach(function (f, i) { f.id = i; });
@@ -119,7 +120,7 @@
 
   // ---------- physics ----------
   function newState() {
-    return { tick: 0, t: 0, x: 0, y: 430, vx: P.CRUISE, vy: 0, hold: false, lift: 0, invuln: 0, ups: 0, birdHits: 0, finished: false, finishT: 0,
+    return { tick: 0, t: 0, x: 0, y: 740, vx: P.CRUISE, vy: 0, hold: false, lift: 0, invuln: 0, ups: 0, birdHits: 0, finished: false, finishT: 0,
       taken: {}, hits: 0, rings: 0, inGust: 0, inUp: false, events: [], cursor: 0 };
   }
 
@@ -134,7 +135,7 @@
 
   function hit(s, kind) {
     if (s.invuln > 0) return;
-    s.vx = Math.max(P.VMIN, s.vx * P.HIT_KEEP); s.vy = kind === 'zap' ? 260 : -120;
+    s.vx = Math.max(P.VMIN, s.vx * P.HIT_KEEP); s.vy = kind === 'zap' ? 340 : -150;
     s.invuln = P.INVULN; s.hits++; if (kind === 'bird') s.birdHits++;
     s.events.push({ e: 'hit', kind: kind });
   }
@@ -160,7 +161,7 @@
         if (kx >= f.x0 && kx <= f.x1 && ky >= f.top) { ay -= f.power; up = true; }
       } else if (f.type === 'storm') {
         var dx = kx - f.x, dy = ky - f.y;
-        if (Math.abs(dx) < f.r * 1.6 && dy > 0) ay += 650;
+        if (Math.abs(dx) < f.r * 1.6 && dy > 0) ay += 850;
         if (dx * dx + dy * dy < (f.r * 0.8 + W.KITE_R) * (f.r * 0.8 + W.KITE_R)) hit(s, 'storm');
         else if (Math.abs(dx) < 34 && dy > 0 && stormStrike(f, s.t).strike) hit(s, 'zap');
       } else if (f.type === 'bird') {
@@ -218,16 +219,16 @@
   // ---------- simple bot (par time, tests) ----------
   function botHold(s, course) {
     // Aim for the next ring / avoid hazards ahead; pump around the target height.
-    var target = 430, F = course.features;
+    var target = 740, F = course.features;
     for (var i = s.cursor; i < F.length; i++) {
       var f = F[i]; if (f.x0 > s.x + 700) break;
       if (f.type === 'ring' && !s.taken[f.id] && f.x > s.x + 20) { target = f.y; break; }
       if (f.type === 'gust' && f.power > 0 && f.x1 > s.x) { target = (f.y0 + f.y1) / 2; break; }
-      if (f.type === 'gust' && f.power < 0 && f.x1 > s.x) { target = f.y0 <= W.CEIL + 1 ? f.y1 + 80 : f.y0 - 80; break; }
-      if (f.type === 'storm' && f.x > s.x) { target = f.y + f.r + 140 < W.GROUND - 40 ? f.y + f.r * 2 + 120 : f.y - f.r - 90; if (Math.abs(f.x - s.x) < 200) target = Math.min(target, W.GROUND - 40); break; }
-      if (f.type === 'bird' && f.x > s.x) { target = f.y > 430 ? f.y - 170 : f.y + 170; break; }
+      if (f.type === 'gust' && f.power < 0 && f.x1 > s.x) { target = f.y0 <= W.CEIL + 1 ? f.y1 + 120 : f.y0 - 120; break; }
+      if (f.type === 'storm' && f.x > s.x) { target = f.y + f.r + 200 < W.GROUND - 40 ? f.y + f.r * 2 + 170 : f.y - f.r - 120; if (Math.abs(f.x - s.x) < 200) target = Math.min(target, W.GROUND - 40); break; }
+      if (f.type === 'bird' && f.x > s.x) { target = f.y > 740 ? f.y - 260 : f.y + 260; break; }
     }
-    var lead = s.y + s.vy * 0.28;
+    var lead = s.y + s.vy * 0.3;
     return lead > target;
   }
   function botRun(course, maxTicks) {

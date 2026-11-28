@@ -1,6 +1,6 @@
 /* Save game, quests, streak + freeze, settings, and the ghost adapter.
- * Ghosts: 'local' mode keeps your best per course in localStorage. The online adapter (Supabase free plan, see
- * docs/DESIGN.md §11) stays OFF until KC_CONFIG.backend.url and .anonKey are both filled in; any network error falls back to local. */
+ * Ghosts: 'local' mode keeps your best per course in localStorage. The online adapter (js/online.js -> Cloudflare Worker
+ * gust-rally-api, see server/README.md) stays OFF until KC_CONFIG.backend.mode === 'worker' and .url is set; any network error falls back to local. */
 (function (root) {
   'use strict';
   var C = root.KC_CONFIG, KEY = C.storageKey;
@@ -12,11 +12,19 @@
     }
   } catch (e) {}
   function load() { try { return JSON.parse(localStorage.getItem(KEY)) || {}; } catch (e) { return {}; } }
-  var data = load();
-  data.best = data.best || {}; data.breeze = data.breeze || 0; data.streak = data.streak || 0; data.runs = data.runs || 0;
-  data.freezes = data.freezes || 0; data.quests = data.quests || { day: null, prog: {}, claimed: {} };
-  data.settings = Object.assign({ sfx: true, music: true, haptics: true, reduced: null }, data.settings || {});
-  function save() { try { localStorage.setItem(KEY, JSON.stringify(data)); } catch (e) {} }
+  var data = {}, Cos = root.KCCos, PF = root.KCPlatform;
+  /** (Re)load the save into the single `data` object. Called at start and again once the native Preferences copy is in. */
+  function hydrate() {
+    var d = load(), k; for (k in data) delete data[k]; for (k in d) data[k] = d[k];
+    data.best = data.best || {}; data.breeze = data.breeze || 0; data.streak = data.streak || 0; data.runs = data.runs || 0;
+    data.freezes = data.freezes || 0; data.quests = data.quests || { day: null, prog: {}, claimed: {} };
+    data.settings = Object.assign({ sfx: true, music: true, haptics: true, reduced: null }, data.settings || {});
+    data.owned = data.owned || { kite: ['classic'], tail: ['bows'], trail: ['ribbon'] };
+    data.equip = Object.assign(Cos ? Cos.defaults() : {}, data.equip || {});
+    data.packs = data.packs || {};
+  }
+  hydrate();
+  function save() { var v = JSON.stringify(data); if (PF) PF.write(KEY, v); else { try { localStorage.setItem(KEY, v); } catch (e) {} } }
   function dayKey(seed) { return seed.replace('gustrally-', ''); }
   function addDays(day, n) { return new Date(Date.parse(day + 'T00:00:00Z') + n * 864e5).toISOString().slice(0, 10); }
   function utcToday() { return new Date().toISOString().slice(0, 10); }
@@ -64,21 +72,17 @@
   }
 
   // ---------- online adapter (OFF unless configured) ----------
-  var B = C.backend || {};
-  function onlineOn() { return B.mode === 'supabase' && !!B.url && !!B.anonKey; }
-  function rpc(name, body) {
-    return fetch(B.url.replace(/\/$/, '') + '/rest/v1/rpc/' + name, { method: 'POST', headers: { 'Content-Type': 'application/json', apikey: B.anonKey, Authorization: 'Bearer ' + B.anonKey }, body: JSON.stringify(body) })
-      .then(function (r) { if (!r.ok) throw new Error('http ' + r.status); return r.json(); });
-  }
+  function onlineOn() { return !!root.KCOnline && root.KCOnline.enabled(); }
+  function dailyDay(seed) { var m = /^gustrally-(\d{4}-\d{2}-\d{2})$/.exec(seed); return m ? m[1] : null; }
 
   var Store = {
-    _applyDaily: applyDaily, _questsFor: questsFor, data: data, save: save, questState: questState, streakShown: streakShown, online: onlineOn,
-    best: function (seed) { return data.best[seed] || null; },
+    _applyDaily: applyDaily, _questsFor: questsFor, hydrate: hydrate, data: data, save: save, questState: questState, streakShown: streakShown, online: onlineOn,
+    best: function (seed) { var b = data.best[seed]; return b && b.ghost && b.ghost.v === root.KCSim.VERSION ? b : null; }, // ghosts from older physics versions are ignored
     set: function (k, v) { data.settings[k] = v; save(); },
     submit: function (seed, run, daily, ctx) {
       ctx = ctx || {};
       data.runs++; rollQuests();
-      var prev = data.best[seed], improved = !prev || run.time < prev.time, info = {};
+      var prev = Store.best(seed), improved = !prev || run.time < prev.time, info = {};
       if (improved) {
         data.best[seed] = { time: run.time, ghost: run.ghost };
         var keys = Object.keys(data.best); if (keys.length > 8) { keys.sort(); delete data.best[keys[0]]; }
@@ -89,7 +93,7 @@
       if (run.hits <= 2) bump('smooth', 1);
       if (ctx.par && run.time <= ctx.par * 1.08) bump('nearPar', 1);
       save();
-      if (onlineOn() && daily) rpc('submit_run', { p_day: dayKey(seed), p_seed: seed, p_time_ms: Math.round(run.time * 1000), p_inputs: run.ghost.toggles, p_samples: run.ghost.samples }).catch(function () {});
+      if (onlineOn() && daily && dailyDay(seed)) root.KCOnline.submitRun(dailyDay(seed), run.ghost).catch(function () {}); // best-effort; queued for retry when offline
       return { improved: improved, prev: prev, freezeUsed: info.freezeUsed, freezeGained: info.freezeGained };
     },
     claimQuest: function (id) {
@@ -98,11 +102,29 @@
       data.quests.claimed[id] = 1; data.breeze += q.reward; save(); return q.reward;
     },
     addBreeze: function (n) { data.breeze += n; save(); },
+    /** Rewarded "double Breeze" uses left today (cap from config; resets at 00:00 UTC). */
+    adsLeft: function () { var cap = ((C.ads || {}).maxRewardedPerDay) || 3, d = utcToday(); return data.adDay && data.adDay.day === d ? Math.max(0, cap - data.adDay.n) : cap; },
+    noteAd: function () { var d = utcToday(); if (!data.adDay || data.adDay.day !== d) data.adDay = { day: d, n: 0 }; data.adDay.n++; save(); },
+    // ---- cosmetics (visual only; bought with earned Breeze) ----
+    owns: function (slot, id) { return data.owned[slot].indexOf(id) >= 0; },
+    loadout: function () { return Object.assign({}, data.equip); },
+    equip: function (slot, id) { if (!Store.owns(slot, id)) return false; data.equip[slot] = id; save(); return true; },
+    /** Spend Breeze. Returns 'ok' | 'owned' | 'poor'. */
+    buy: function (slot, id) {
+      var it = Cos.find(slot, id); if (Store.owns(slot, id)) return 'owned';
+      if (data.breeze < it.price) return 'poor';
+      data.breeze -= it.price; data.owned[slot].push(id); save(); return 'ok';
+    },
+    /** Grant a cosmetic pack (IAP or test mode): unlocks items directly, no currency involved. */
+    grantItems: function (items, packId) {
+      items.forEach(function (x) { if (!Store.owns(x[0], x[1])) data.owned[x[0]].push(x[1]); });
+      if (packId) data.packs[packId] = 1; save();
+    },
     /** Ghost API: [my best, friends, 2 players just above my rank]. Local mode returns only my best. */
     ghostsFor: function (seed) {
-      var b = data.best[seed], mine = b ? [b.ghost] : [];
-      if (!onlineOn()) return Promise.resolve(mine);
-      return rpc('ghosts_for', { p_day: dayKey(seed) }).then(function (rows) { return mine.concat((rows || []).map(function (r) { return { v: 1, seed: seed, time: r.time_ms / 1000, toggles: r.inputs, samples: r.samples, every: 4, meta: { name: r.name } }; })); }).catch(function () { return mine; });
+      var b = Store.best(seed), mine = b ? [b.ghost] : [];
+      if (!onlineOn() || !dailyDay(seed)) return Promise.resolve(mine);
+      return root.KCOnline.ghosts(dailyDay(seed)).then(function (remote) { return mine.concat(remote); }).catch(function () { return mine; });
     }
   };
   root.KCStore = Store;

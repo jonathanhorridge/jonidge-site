@@ -33,6 +33,7 @@
       xp: 0, level: 1,
       cards: defaultCards(up),
       village: { grid: emptyGrid(), skin: 'default' },
+      name: '', playerId: '', seenInbox: [],
       trophies: 0, shieldUntil: 0,
       dailies: { lastLogin: '', streak: 0, claimed: false, quests: [], chestAt: 0, lastQuests: '' },
       pass: { season: 1, xp: 0, premium: false, freeClaim: [], premClaim: [] },
@@ -72,6 +73,68 @@
   M.save = function (s) { try { localStorage.setItem(KEY, JSON.stringify(s)); } catch (e) {} };
   M.xpFor = function (lv) { return D.XP_LEVELS[Math.min(lv, D.XP_LEVELS.length - 1)] || D.XP_LEVELS[D.XP_LEVELS.length - 1] + (lv - D.XP_LEVELS.length + 1) * 600; };
   M.levelFromXp = function (xp) { var lv = 1; while (lv < 99 && xp >= M.xpFor(lv)) lv++; return lv; };
+
+  M.LEAGUES = [
+    { min: 0, id: 'driftwood', name: 'Driftwood League' },
+    { min: 100, id: 'pebble', name: 'Pebble League' },
+    { min: 250, id: 'shell', name: 'Shell League' },
+    { min: 450, id: 'coral', name: 'Coral League' },
+    { min: 700, id: 'pearl', name: 'Pearl League' },
+    { min: 1000, id: 'tide', name: 'Tide League' }
+  ];
+  M.league = function (trophies) {
+    var t = trophies || 0, cur = M.LEAGUES[0];
+    for (var i = 0; i < M.LEAGUES.length; i++) if (t >= M.LEAGUES[i].min) cur = M.LEAGUES[i];
+    return cur;
+  };
+  M.NAME_SUGGESTIONS = ['Sandy Sam', 'Pearl Pete', 'Tide Tessa', 'Captain Shuck', 'Nacre Nina', 'Kelp Karen', 'Claw Clive', 'Foam Fiona', 'Riptide Ray', 'Shell Shocked'];
+  M.cleanName = function (raw) {
+    var s = String(raw || '').replace(/\s+/g, ' ').trim();
+    if (s.length < 2) return { err: 'Too short — at least 2 letters.' };
+    if (s.length > 18) return { err: 'Keep it to 18 characters.' };
+    if (!/^[A-Za-z][A-Za-z0-9 '\-]*$/.test(s)) return { err: 'Use letters, numbers, spaces or hyphens.' };
+    return { name: s };
+  };
+  M.setName = function (save, raw) {
+    var c = M.cleanName(raw);
+    if (c.err) return c.err;
+    save.name = c.name;
+    return null;
+  };
+  M.mergeInbox = function (save, rows) {
+    save.seenInbox = save.seenInbox || [];
+    save.raidLog = save.raidLog || [];
+    var ev = [];
+    (rows || []).forEach(function (row) {
+      var id = row.id;
+      if (!id) return;
+      if (save.seenInbox.indexOf(id) >= 0) return;
+      if (save.raidLog.some(function (r) { return r.id === id; })) { save.seenInbox.push(id); return; }
+      var rec = {
+        id: id,
+        t: row.created_at ? Date.parse(row.created_at) : Date.now(),
+        name: row.attacker_name || 'A captain',
+        botId: row.attacker_id,
+        playerId: row.attacker_id,
+        trophies: 0,
+        win: !!row.win,
+        stolen: row.stolen || 0,
+        delta: -(row.trophy_delta || 0),
+        seed: row.seed,
+        moves: row.moves || [],
+        snap: row.snap,
+        online: true
+      };
+      save.sand = Math.max(0, (save.sand || 0) - rec.stolen);
+      if (!save.cupsSynced) save.trophies = Math.max(0, (save.trophies || 0) + rec.delta);
+      save.raidLog.unshift(rec);
+      save.seenInbox.push(id);
+      ev.push(rec);
+    });
+    if (save.raidLog.length > 20) save.raidLog = save.raidLog.slice(0, 20);
+    if (ev.some(function (r) { return r.win; })) save.shieldUntil = Math.max(save.shieldUntil || 0, Date.now() + (D.SHIELD_MS || 0));
+    return ev;
+  };
 
   // ---------- daily clock ----------
   M.rollQuests = function (save, seed) {
@@ -377,6 +440,7 @@
   M.simulateIncoming = function (save, now) {
     now = now || Date.now();
     var ev = [];
+    if (save.onlineInbox) return ev;
     if ((save.shieldUntil || 0) > now) return ev;
     // at most one wave per calendar day, 0-2 raids, skipped the first day a village exists
     save.raidTick = save.raidTick || {};

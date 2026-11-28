@@ -394,6 +394,7 @@
   // Full synchronous move (tests, bot, quick replays). Returns a summary or null if the swap is not valid.
   E.playMove = function (s, a, b) {
     if (s.status !== 'play' || s.moves <= 0 || !E.validSwap(s, a, b)) return null;
+    s.moveLog = s.moveLog || []; s.moveLog.push([a, b]);
     E.swap(s, a, b);
     s.moves--;
     var combo = 0, hint = b, out = { steps: [], enemy: [] };

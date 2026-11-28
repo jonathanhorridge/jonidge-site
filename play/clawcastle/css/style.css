@@ -180,3 +180,13 @@ button{font-family:inherit;cursor:pointer;border:0}
 .streak-day.claimed{background:#D9F5C8}
 .chest-open{font-size:42px;margin:8px 0}
 #scr-shop,#scr-pass,#scr-cards,#scr-quests{background:#F6D99A}
+
+.player-chip{cursor:pointer}
+.player-chip .who{font-weight:700;font-size:13px;color:#7A3A00;max-width:92px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.player-chip .cups-mini{font-weight:700;font-size:12px;color:#8A5A00;flex:none}
+.chip.league{background:#E8F6FF;color:#0D4A6A;font-size:12px}
+#nm-in{width:100%;box-sizing:border-box;border:2px solid #E0C48A;border-radius:14px;padding:10px 12px;font-family:"Fredoka",sans-serif;font-size:18px;font-weight:700;color:#5A320A;background:#FFFDF6}
+#nm-in:focus{outline:none;border-color:#FF8A2B}
+.name-sugs{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0}
+.name-sug{border:0;background:#FFF3D6;border-radius:999px;padding:6px 10px;font-family:"Fredoka",sans-serif;font-weight:700;font-size:12px;color:#7A3A00;box-shadow:0 2px 0 #E0C48A}
+#nm-err,.err{color:#C62828;font-weight:700;font-size:13px}

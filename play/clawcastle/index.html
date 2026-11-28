@@ -19,7 +19,6 @@
   }
 })();
 </script>
-
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
 <meta name="theme-color" content="#2EC4E6">
@@ -86,6 +85,7 @@
     <button class="iconbtn" data-go="title" aria-label="Back"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7" stroke="#fff" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
     <div class="wallet" data-wallet></div>
     <div class="chip cups" id="r-cups">0</div>
+    <div class="chip league" id="r-league">Driftwood League</div>
   </div>
   <div class="raid-scroll">
     <div class="raid-head">
@@ -98,7 +98,7 @@
     <div id="r-log" class="log-list"></div>
     <h2 class="sec">Your raids</h2>
     <div id="r-atk" class="log-list"></div>
-    <p class="shop-note">Beaches are other captains — or clever stand-ins while the shores are quiet. Real online raids need a free backend account later; everything here works offline.</p>
+    <p class="shop-note">Beaches here belong to other captains. If the shores are quiet we fill in a few so you can always raid, and everything still works if you are offline.</p>
   </div>
 </section>
 <section id="scr-shop" class="screen" hidden>
@@ -159,6 +159,7 @@
 <script src="js/data.js"></script>
 <script src="js/engine.js"></script>
 <script src="js/meta.js"></script>
+<script src="js/supabase-api.js"></script>
 <script src="js/audio.js"></script>
 <script src="js/ads.js"></script>
 <script src="js/render.js"></script>

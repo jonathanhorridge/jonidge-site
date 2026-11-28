@@ -12,7 +12,7 @@
   var bootEvents = M.tickDailies(save);
   M.save(save);
 
-  function persist() { M.save(save); }
+  function persist() { M.save(save); if (M.RaidAPI && M.RaidAPI.syncVillage) M.RaidAPI.syncVillage(save); }
   function wait(ms) { return new Promise(function (r) { setTimeout(r, FAST ? 0 : ms); }); }
   function toast(msg, ms) { var t = $('#toast'); t.textContent = msg; t.classList.add('on'); clearTimeout(toast.h); toast.h = setTimeout(function () { t.classList.remove('on'); }, ms || 2200); }
   function vibrate(ms) { try { if (navigator.vibrate) navigator.vibrate(ms); } catch (e) {} }
@@ -30,7 +30,40 @@
     var need = M.xpFor(save.level), prev = save.level > 1 ? M.xpFor(save.level - 1) : 0;
     var pct = Math.max(0, Math.min(100, (save.xp - prev) / Math.max(1, need - prev) * 100));
     var chip = $('#t-player');
-    if (chip) chip.innerHTML = '<span class="lv">Lv ' + save.level + '</span><span class="xp"><i style="width:' + pct + '%"></i></span>';
+    if (chip) {
+      var lg = M.league(save.trophies);
+      var nm = save.name || 'Captain';
+      chip.innerHTML = '<span class="lv">Lv ' + save.level + '</span><span class="who">' + nm + '</span><span class="xp"><i style="width:' + pct + '%"></i></span><span class="cups-mini">\uD83C\uDFC6 ' + (save.trophies || 0) + '</span>';
+      chip.title = lg.name;
+      chip.onclick = function () { openNamePicker(true); };
+    }
+  }
+
+  function openNamePicker(force) {
+    if (!force && save.name) return;
+    var cur = save.name || '';
+    var sugs = (M.NAME_SUGGESTIONS || []).map(function (n) {
+      return '<button type="button" class="name-sug" data-nm="' + n + '">' + n + '</button>';
+    }).join('');
+    modal('<h2>Your captain name</h2><p class="info">Other captains will see this when they visit your beach.</p>' +
+      '<input id="nm-in" maxlength="18" placeholder="e.g. Captain Shuck" value="' + cur.replace(/"/g, '&quot;') + '">' +
+      '<div class="name-sugs">' + sugs + '</div>' +
+      '<p class="err" id="nm-err" hidden></p>' +
+      '<div class="btns"><button class="btn big orange" id="nm-ok">That\u2019s me</button>' +
+      (save.name ? '<button class="btn small ghost" id="m-close">Cancel</button>' : '') + '</div>');
+    var inp = $('#nm-in');
+    if (inp) setTimeout(function () { inp.focus(); }, 50);
+    $$('.name-sug').forEach(function (b) {
+      b.onclick = function () { if (inp) inp.value = b.getAttribute('data-nm'); };
+    });
+    $('#nm-ok').onclick = function () {
+      var err = M.setName(save, inp ? inp.value : '');
+      if (err) { var e = $('#nm-err'); if (e) { e.hidden = false; e.textContent = err; } return; }
+      persist(); closeModal(); updateWallet();
+      if (M.RaidAPI && M.RaidAPI.syncVillage) M.RaidAPI.syncVillage(save, true);
+      toast('Welcome, ' + save.name + '!');
+    };
+    if ($('#m-close')) $('#m-close').onclick = closeModal;
   }
 
   function show(name) {
@@ -42,7 +75,7 @@
     if (name !== 'game') { $('#coach').hidden = true; R.spotlight = null; }
     if (name === 'map') buildMap();
     if (name === 'village') buildVillage();
-    if (name === 'raid') buildRaid();
+    if (name === 'raid') { buildRaid(); if (!save.name && M.RaidAPI && M.RaidAPI.mode === 'online') setTimeout(function () { openNamePicker(); }, 350); }
     if (name === 'shop') buildShop();
     if (name === 'pass') buildPass();
     if (name === 'cards') buildCards();
@@ -240,17 +273,39 @@
   }
   function buildRaid() {
     var now = Date.now();
+    var lg = M.league(save.trophies);
     $('#r-cups').textContent = '\uD83C\uDFC6 ' + (save.trophies || 0);
+    if ($('#r-league')) $('#r-league').textContent = lg.name;
     var sh = (save.shieldUntil || 0) > now ? 'Shield up for ' + timeLeft(save.shieldUntil - now) + '. Your village is safe.' : 'No shield. Other captains may raid you while you are away.';
     $('#r-shield').textContent = sh;
+    function paintOpps(list) {
+      $('#r-list').innerHTML = list.map(function (o, i) {
+        var lg = M.league(o.trophies);
+        return '<div class="opp" data-opp="' + i + '"><canvas width="168" height="112"></canvas><div><h3>' + o.name + '</h3><p>' + o.trophies + ' cups · ' + lg.name.replace(' League','') + '</p></div><button class="btn small orange" data-raid="' + i + '">Raid</button></div>';
+      }).join('') || '<p class="shop-note">No beaches left today. Come back tomorrow, or tap New beaches.</p>';
+      $$('#r-list canvas').forEach(function (c, i) { if (list[i] && list[i].grid) miniVillage(c, list[i].grid); });
+      $$('[data-raid]').forEach(function (b) {
+        b.onclick = function () { Sfx.play('click'); startPvp(list[+b.getAttribute('data-raid')]); };
+      });
+    }
     var list = M.listOpponents(save);
-    $('#r-list').innerHTML = list.map(function (o, i) {
-      return '<div class="opp" data-opp="' + i + '"><canvas width="168" height="112"></canvas><div><h3>' + o.name + '</h3><p>' + o.trophies + ' cups · power ' + o.power + '</p></div><button class="btn small orange" data-raid="' + i + '">Raid</button></div>';
-    }).join('') || '<p class="shop-note">No beaches left today. Come back tomorrow, or tap New beaches.</p>';
-    $$('#r-list canvas').forEach(function (c, i) { miniVillage(c, list[i].grid); });
-    $$('[data-raid]').forEach(function (b) {
-      b.onclick = function () { Sfx.play('click'); startPvp(list[+b.getAttribute('data-raid')]); };
-    });
+    paintOpps(list);
+    if (M.RaidAPI && M.RaidAPI.opponents) {
+      var paintOnline = function () {
+        return M.RaidAPI.opponents(save).then(function (online) { if (online && online.length) paintOpps(online); });
+      };
+      if (M.RaidAPI.pullInbox) {
+        M.RaidAPI.pullInbox(save).then(function (ev) {
+          if (ev && ev.length) {
+            persist();
+            $('#r-log').innerHTML = (save.raidLog || []).length ? save.raidLog.map(function (r) { return logLine(r, 'def'); }).join('') : '<p class="shop-note">No one has raided you yet.</p>';
+            bindLogButtons();
+            if (ev.some(function (r) { return r.win; })) toast(ev.length === 1 ? ev[0].name + ' raided your village!' : ev.length + ' captains raided your village!');
+          }
+          return paintOnline();
+        }).catch(function () { paintOnline(); });
+      } else paintOnline().catch(function () {});
+    }
     $('#r-refresh').onclick = function () { Sfx.play('click'); M.refreshOpponents(save); persist(); buildRaid(); };
     function logLine(r, kind) {
       var when = new Date(r.t).toLocaleString('en-GB', { hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'short' });
@@ -263,15 +318,27 @@
     }
     $('#r-log').innerHTML = (save.raidLog || []).length ? save.raidLog.map(function (r) { return logLine(r, 'def'); }).join('') : '<p class="shop-note">No one has raided you yet.</p>';
     $('#r-atk').innerHTML = (save.attacks || []).length ? save.attacks.map(function (r) { return logLine(r, 'atk'); }).join('') : '<p class="shop-note">You have not raided anyone yet.</p>';
-    $$('[data-watch]').forEach(function (b) { b.onclick = function () { watchReplay(b.getAttribute('data-watch')); }; });
-    $$('[data-rev]').forEach(function (b) {
-      b.onclick = function () {
-        var rec = (save.raidLog || []).filter(function (r) { return r.id === b.getAttribute('data-rev'); })[0];
-        if (!rec) return;
-        var seed = parseInt(String(rec.botId || '').replace('bot-', ''), 36) || 1;
-        startPvp(M.genBot(seed, rec.trophies || save.trophies), 'Revenge on ' + rec.name);
-      };
-    });
+    bindLogButtons();
+    function bindLogButtons() {
+      $$('[data-watch]').forEach(function (b) { b.onclick = function () { watchReplay(b.getAttribute('data-watch')); }; });
+      $$('[data-rev]').forEach(function (b) {
+        b.onclick = function () {
+          var rec = (save.raidLog || []).filter(function (r) { return r.id === b.getAttribute('data-rev'); })[0];
+          if (!rec) return;
+          Sfx.play('click');
+          var pid = rec.playerId || rec.botId;
+          if (pid && String(pid).indexOf('bot-') !== 0 && M.RaidAPI && M.RaidAPI.fetchVillage) {
+            M.RaidAPI.fetchVillage(pid).then(function (opp) {
+              if (opp && opp.grid) startPvp(opp, 'Revenge on ' + rec.name);
+              else toast('That beach could not be found just now.');
+            });
+            return;
+          }
+          var seed = parseInt(String(rec.botId || '').replace('bot-', ''), 36) || 1;
+          startPvp(M.genBot(seed, rec.trophies || save.trophies), 'Revenge on ' + rec.name);
+        };
+      });
+    }
   }
 
   // ---------- shop / pass / cards / quests ----------
@@ -569,6 +636,7 @@
   async function runMove(a, b, fromReplay) {
     busy = true; R.sel = null; R.lane = -1; R.hint = null;
     if (!fromReplay && tutStep < 99 && tutStep !== 0) { /* keep coach until they dismiss */ }
+    if (!fromReplay) { s.moveLog = s.moveLog || []; s.moveLog.push([a, b]); }
     E.swap(s, a, b); s.moves--; hud(); Sfx.play('swap');
     await wait(180);
     var combo = 0, hint = b;
@@ -674,7 +742,10 @@
       var stars = E.stars(s);
       var rew = pendingOpp ? M.pvpReward(save, s, stars, pendingOpp) : M.campaignReward(save, s, stars);
       persist(); Sfx.play('win');
-      if (pendingOpp) M.recordAttack(save, pendingOpp, s, rew);
+      if (pendingOpp) {
+        M.recordAttack(save, pendingOpp, s, rew);
+        if (M.RaidAPI && M.RaidAPI.submitRaid) M.RaidAPI.submitRaid(save, pendingOpp, s, rew);
+      }
       persist();
       var st = ''; for (var k = 0; k < 3; k++) st += '<span class="' + (k < stars ? 'on' : '') + '">\u2605</span>';
       var next = !pendingOpp && s.level + 1 < D.LEVELS.length;
@@ -696,7 +767,9 @@
       var f = E.flag(s);
       if (pendingOpp) {
         var rew2 = M.pvpReward(save, s, 0, pendingOpp);
-        M.recordAttack(save, pendingOpp, s, rew2); persist();
+        M.recordAttack(save, pendingOpp, s, rew2);
+        if (M.RaidAPI && M.RaidAPI.submitRaid) M.RaidAPI.submitRaid(save, pendingOpp, s, rew2);
+        persist();
       }
       modal('<h2 class="lose">The tide turned...</h2><p>The Flag Tower held with <b>' + (f ? Math.ceil(f.hp) : 0) + ' HP</b> left.</p>' +
         '<p class="tip">Tip: send troops up the flag\u2019s column, take out cannons that cover it, and upgrade your army and village.</p>' +
@@ -752,6 +825,17 @@
   R.init(cv);
   Sfx.set('sound', save.sound); Sfx.set('music', save.music); soundLabels();
   show('title');
+  if (M.RaidAPI && M.RaidAPI.connect) {
+    M.RaidAPI.connect(save).then(function (res) {
+      if (res && res.status && res.status.online) persist();
+      var ev = res && res.inbox;
+      if (ev && ev.length) {
+        persist();
+        var stole = ev.reduce(function (a, r) { return a + (r.stolen || 0); }, 0);
+        toast((ev.length === 1 ? ev[0].name + ' raided your village!' : ev.length + ' captains raided your village!') + (stole ? ' They stole ' + stole + ' Sand.' : ''), 4000);
+      }
+    }).catch(function () {});
+  }
   requestAnimationFrame(loop);
   if (document.fonts && document.fonts.load) document.fonts.load('20px "Lilita One"');
 
@@ -776,6 +860,7 @@
   window.__cc = {
     get state() { return s; }, get screen() { return screen; }, get busy() { return busy; }, get save() { return save; },
     set fast(v) { FAST = !!v; }, E: E, M: M, start: start, startPvp: startPvp, show: show, intro: intro,
+    openNamePicker: openNamePicker, setName: function (n) { var e = M.setName(save, n); if (!e) persist(); return e; },
     botMove: function () { if (!s || busy || s.status !== 'play') return false; var m = E.botMove(s); if (!m) return false; runMove(m[0], m[1]); return true; },
     attempt: attempt, openChest: openChest,
     reset: function () { save = M.defaults(); persist(); }

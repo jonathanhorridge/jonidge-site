@@ -1,39 +1,54 @@
-/* Clawcastle app: screens, input, animation sequencing, saving. */
+/* Clawcastle app v2: screens, battle input, village, raids, dailies, shop. */
 (function () {
   'use strict';
-  var D = window.CCData, E = window.CCEngine, R = window.Render, Sfx = window.Sfx;
+  var D = window.CCData, E = window.CCEngine, M = window.CCMeta, R = window.Render, Sfx = window.Sfx;
   var $ = function (q) { return document.querySelector(q); }, $$ = function (q) { return Array.prototype.slice.call(document.querySelectorAll(q)); };
-  var KEY = 'clawcastle-save-v1';
-  var save = load(), s = null, screen = 'title', prevScreen = 'title', busy = false, drag = null, FAST = false, extraUsed = false, idleT = 0;
+  var save = M.load(), s = null, screen = 'title', prevScreen = 'title';
+  var busy = false, drag = null, FAST = false, extraUsed = false, idleT = 0;
+  var tutStep = 0, replay = null, pendingOpp = null, worldTab = 0;
+  var vSel = null, vTool = null, vMoveFrom = null;
+  var SCREENS = ['title', 'map', 'village', 'raid', 'shop', 'pass', 'cards', 'quests'];
 
-  function defaults() {
-    var up = {}; D.UPGRADES.forEach(function (u) { up[u.id] = u.start; });
-    return { v: 1, unlocked: 0, stars: [], sand: 0, pearls: 0, up: up, sound: true, music: true, seen: {} };
-  }
-  function load() {
-    var d = defaults();
-    try { var x = JSON.parse(localStorage.getItem(KEY) || 'null'); if (x && x.v === 1) { Object.keys(d).forEach(function (k) { if (x[k] == null) x[k] = d[k]; }); Object.keys(d.up).forEach(function (k) { if (x.up[k] == null) x.up[k] = d.up[k]; }); return x; } } catch (e) {}
-    return d;
-  }
-  function persist() { try { localStorage.setItem(KEY, JSON.stringify(save)); } catch (e) {} }
+  var bootEvents = M.tickDailies(save);
+  M.save(save);
+
+  function persist() { M.save(save); }
   function wait(ms) { return new Promise(function (r) { setTimeout(r, FAST ? 0 : ms); }); }
   function toast(msg, ms) { var t = $('#toast'); t.textContent = msg; t.classList.add('on'); clearTimeout(toast.h); toast.h = setTimeout(function () { t.classList.remove('on'); }, ms || 2200); }
   function vibrate(ms) { try { if (navigator.vibrate) navigator.vibrate(ms); } catch (e) {} }
   function fmt(n) { n = Math.round(n * 10) / 10; return String(n); }
+  function walletHTML() {
+    return '<span class="chip sand"><i class="ico-sand"></i><b class="w-sand">0</b></span>' +
+      '<span class="chip pearls"><i class="ico-pearl"></i><b class="w-pearls">0</b></span>' +
+      '<span class="chip gems"><i class="ico-gem"></i><b class="w-gems">0</b></span>';
+  }
+  $$('[data-wallet]').forEach(function (el) { el.innerHTML = walletHTML(); });
+  function updateWallet() {
+    $$('.w-sand').forEach(function (e) { e.textContent = save.sand; });
+    $$('.w-pearls').forEach(function (e) { e.textContent = save.pearls; });
+    $$('.w-gems').forEach(function (e) { e.textContent = save.gems || 0; });
+    var need = M.xpFor(save.level), prev = save.level > 1 ? M.xpFor(save.level - 1) : 0;
+    var pct = Math.max(0, Math.min(100, (save.xp - prev) / Math.max(1, need - prev) * 100));
+    var chip = $('#t-player');
+    if (chip) chip.innerHTML = '<span class="lv">Lv ' + save.level + '</span><span class="xp"><i style="width:' + pct + '%"></i></span>';
+  }
 
-  // ---------- screens ----------
   function show(name) {
-    if (name === 'back') name = prevScreen === 'game' ? 'map' : prevScreen;
+    if (name === 'back') name = prevScreen === 'game' ? 'title' : prevScreen;
     if (name !== screen) prevScreen = screen;
     screen = name;
-    ['title', 'map', 'base'].forEach(function (n) { $('#scr-' + n).hidden = n !== name; });
+    SCREENS.forEach(function (n) { var el = $('#scr-' + n); if (el) el.hidden = n !== name; });
     $('#hud').hidden = name !== 'game';
-    if (name !== 'game') $('#coach').hidden = true;
+    if (name !== 'game') { $('#coach').hidden = true; R.spotlight = null; }
     if (name === 'map') buildMap();
-    if (name === 'base') buildBase();
+    if (name === 'village') buildVillage();
+    if (name === 'raid') buildRaid();
+    if (name === 'shop') buildShop();
+    if (name === 'pass') buildPass();
+    if (name === 'cards') buildCards();
+    if (name === 'quests') buildQuests();
     updateWallet();
   }
-  function updateWallet() { $$('.w-sand').forEach(function (e) { e.textContent = save.sand; }); $$('.w-pearls').forEach(function (e) { e.textContent = save.pearls; }); }
   document.addEventListener('click', function (e) {
     var go = e.target.closest('[data-go]'); if (!go) return;
     Sfx.play('click'); show(go.getAttribute('data-go'));
@@ -43,72 +58,44 @@
   $('#t-sound').onclick = function () { save.sound = !save.sound; Sfx.set('sound', save.sound); persist(); soundLabels(); };
   $('#t-music').onclick = function () { save.music = !save.music; Sfx.set('music', save.music); persist(); soundLabels(); };
 
-  // ---------- level map ----------
-  function starsHtml(n) { var h = ''; for (var i = 0; i < 3; i++) h += '<span class="' + (i < n ? '' : 'off') + '">\u2605</span>'; return h; }
-  function buildMap() {
-    var inner = $('#map-inner'), n = D.LEVELS.length, gap = 112, H = n * gap + 140;
-    inner.style.height = H + 'px';
-    var pts = [], html = '';
-    D.LEVELS.forEach(function (L, i) {
-      var y = H - 90 - i * gap, x = 50 + Math.sin(i * 1.15) * 28;
-      pts.push([x, y]);
-      var locked = i > save.unlocked, st = save.stars[i] || 0, cur = i === save.unlocked;
-      html += '<button class="node' + (cur ? ' cur' : '') + (i === n - 1 ? ' boss' : '') + '" data-level="' + i + '" style="left:' + x + '%;top:' + y + 'px"' + (locked ? ' disabled' : '') + ' aria-label="Raid ' + (i + 1) + '">' +
-        (locked ? '<svg viewBox="0 0 24 24" width="28" height="28"><rect x="5" y="11" width="14" height="10" rx="2" fill="#888"/><path d="M8 11V8a4 4 0 0 1 8 0v3" stroke="#888" stroke-width="2.5" fill="none"/></svg>' : (i + 1)) +
-        (cur || i === n - 1 ? '<span class="nm">' + L.name + '</span>' : '') +
-        (!locked ? '<span class="st">' + starsHtml(st) + '</span>' : '') + '</button>';
-    });
-    var W = Math.min(window.innerWidth, 480);
-    var path = '<svg class="path" viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none"><path d="' + pts.map(function (p, i) { return (i ? 'L' : 'M') + (p[0] / 100 * W) + ' ' + p[1]; }).join(' ') + '" stroke="rgba(255,255,255,.75)" stroke-width="10" stroke-dasharray="2 18" stroke-linecap="round" fill="none"/></svg>';
-    // little beach decorations
-    var deco = '';
-    for (var k = 0; k < n; k++) { var dx = k % 2 ? 8 : 86, dy = H - 140 - k * gap; deco += '<canvas class="map-deco" data-k="' + (k % 5) + '" width="80" height="80" style="position:absolute;left:' + dx + '%;top:' + dy + 'px;width:40px;height:40px;margin-left:-20px;opacity:.85"></canvas>'; }
-    inner.innerHTML = path + deco + html;
-    $$('.map-deco').forEach(function (c) { var k = +c.getAttribute('data-k'), x = c.getContext('2d'); R.drawTileIcon(x, k, 80); });
-    $$('.node').forEach(function (b) { b.onclick = function () { Sfx.play('click'); intro(+b.getAttribute('data-level')); }; });
-    var cur = $('.node.cur') || $('.node[data-level="0"]');
-    var sc = $('#map-scroll');
-    requestAnimationFrame(function () { sc.scrollTop = Math.max(0, parseFloat(cur.style.top) - sc.clientHeight / 2); });
-  }
-
-  // ---------- home base ----------
-  var baseCv = $('#base-canvas');
-  function upCost(u) { var lv = save.up[u.id]; var idx = lv - u.start; return idx < u.cost.length ? u.cost[idx] : null; }
-  function buildBase() {
-    var html = '';
-    D.UPGRADES.forEach(function (u) {
-      var lv = save.up[u.id], cost = upCost(u), pips = '';
-      for (var i = u.start; i < u.max; i++) pips += '<i class="' + (i < lv ? 'on' : '') + '"></i>';
-      var can = cost != null && save[u.cur] >= cost;
-      html += '<div class="card" data-up="' + u.id + '"><div class="row"><canvas width="96" height="96" data-icon="' + u.id + '"></canvas><div><h3>' + u.name + '</h3><div class="pips">' + pips + '</div></div></div><p>' + u.desc + (D.TROOPS[u.id] ? '. ' + D.TROOPS[u.id].desc : '') + '</p>' +
-        (cost == null ? '<button class="btn small ghost" disabled>Maxed out</button>' : '<button class="btn small ' + (u.cur === 'pearls' ? 'blue' : 'green') + '" data-buy="' + u.id + '"' + (can ? '' : ' disabled') + '>Upgrade &middot; ' + cost + ' ' + (u.cur === 'pearls' ? 'Pearls' : 'Sand') + '</button>') + '</div>';
-    });
-    $('#upgrades').innerHTML = html;
-    $$('[data-icon]').forEach(function (c) {
-      var id = c.getAttribute('data-icon'), x = c.getContext('2d');
-      if (D.TROOPS[id]) R.drawTroop(x, id, 48, 54, 70, 0.3, { brute: save.up[id] >= 4 });
-      else if (id === 'harbour') { x.fillStyle = '#2EC4E6'; R.rr(x, 4, 50, 88, 40, 12); x.fill(); x.fillStyle = '#8D5524'; x.beginPath(); x.moveTo(18, 60); x.lineTo(78, 60); x.lineTo(68, 76); x.lineTo(28, 76); x.fill(); x.fillStyle = '#fff'; x.beginPath(); x.moveTo(48, 58); x.lineTo(48, 14); x.lineTo(74, 54); x.fill(); }
-      else if (id === 'shrine') R.drawTileIcon(x, 4, 96);
-      else R.drawBuilding(x, 'flag', 48, 62, 70, 50, 0);
-    });
-    $$('[data-buy]').forEach(function (b) { b.onclick = function () { buy(b.getAttribute('data-buy')); }; });
-    $('#shop').innerHTML = window.IAP.products.map(function (p) { return '<div class="card"><h3>' + p.name + '</h3><p>' + p.desc + '</p><button class="btn small ghost" disabled>' + p.price + ' &middot; coming soon</button></div>'; }).join('');
-    updateWallet();
-  }
-  function buy(id) {
-    var u = D.UPGRADES.filter(function (x) { return x.id === id; })[0], cost = upCost(u);
-    if (cost == null || save[u.cur] < cost) return;
-    save[u.cur] -= cost; save.up[id]++; persist();
-    Sfx.play('coin'); toast(u.name + ' upgraded to level ' + save.up[id] + '!');
-    buildBase();
-  }
-
-  // ---------- level intro ----------
-  var NEWS = { pearl: ['Puffer', 'Pearls send Puffers that pop for a big blast.'], bomb: ['Pearl Bomb', 'Match in an L or T shape: a bomb hits three lanes.'], riptide: ['Riptide', 'Match 5 in a row: hits every lane and washes sand away.'] };
   function modal(html, cls) { $('#modal').className = 'modal ' + (cls || ''); $('#modal').innerHTML = html; $('#modal-root').hidden = false; }
   function closeModal() { $('#modal-root').hidden = true; }
+  function starsHtml(n) { var h = ''; for (var i = 0; i < 3; i++) h += '<span class="' + (i < n ? '' : 'off') + '">\u2605</span>'; return h; }
+
+  // ---------- campaign map ----------
+  function buildMap() {
+    var tabs = $('#world-tabs');
+    tabs.innerHTML = D.WORLDS.map(function (w, i) {
+      var open = save.unlocked >= w.from;
+      return '<button class="' + (i === worldTab ? 'on' : '') + '" data-w="' + i + '"' + (open ? '' : ' disabled') + '>' + w.name + (open ? '' : ' \uD83D\uDD12') + '</button>';
+    }).join('');
+    $$('#world-tabs button').forEach(function (b) { b.onclick = function () { worldTab = +b.getAttribute('data-w'); buildMap(); }; });
+    var Wd = D.WORLDS[worldTab] || D.WORLDS[0];
+    var from = Wd.from, to = Wd.to, n = to - from + 1;
+    var inner = $('#map-inner'), gap = 112, H = n * gap + 140;
+    inner.style.height = H + 'px';
+    var pts = [], html = '';
+    for (var i = from; i <= to; i++) {
+      var L = D.LEVELS[i], k = i - from;
+      var y = H - 90 - k * gap, x = 50 + Math.sin(k * 1.15) * 28;
+      pts.push([x, y]);
+      var locked = i > save.unlocked, st = save.stars[i] || 0, cur = i === save.unlocked;
+      html += '<button class="node' + (cur ? ' cur' : '') + (i === to ? ' boss' : '') + '" data-level="' + i + '" style="left:' + x + '%;top:' + y + 'px"' + (locked ? ' disabled' : '') + ' aria-label="Raid ' + (i + 1) + '">' +
+        (locked ? '<svg viewBox="0 0 24 24" width="28" height="28"><rect x="5" y="11" width="14" height="10" rx="2" fill="#888"/><path d="M8 11V8a4 4 0 0 1 8 0v3" stroke="#888" stroke-width="2.5" fill="none"/></svg>' : (i + 1)) +
+        ((cur || i === to || !locked) ? '<span class="nm">' + L.name + '</span>' : '') +
+        (!locked ? '<span class="st">' + starsHtml(st) + '</span>' : '') + '</button>';
+    }
+    var W = Math.min(window.innerWidth, 480);
+    var path = '<svg class="path" viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none"><path d="' + pts.map(function (p, i) { return (i ? 'L' : 'M') + (p[0] / 100 * W) + ' ' + p[1]; }).join(' ') + '" stroke="rgba(255,255,255,.75)" stroke-width="10" stroke-dasharray="2 18" stroke-linecap="round" fill="none"/></svg>';
+    inner.innerHTML = path + html;
+    $$('.node').forEach(function (b) { b.onclick = function () { Sfx.play('click'); intro(+b.getAttribute('data-level')); }; });
+    var cur = $('.node.cur') || $('.node:not([disabled])');
+    var sc = $('#map-scroll');
+    requestAnimationFrame(function () { if (cur) sc.scrollTop = Math.max(0, parseFloat(cur.style.top) - sc.clientHeight / 2); });
+  }
+  var NEWS = { pearl: ['Puffer', 'Pearls send Puffers that pop for a big blast.'], bomb: ['Pearl Bomb', 'Match in an L or T shape: a bomb hits three lanes.'], riptide: ['Riptide', 'Match 5 in a row: hits every lane and washes sand away.'] };
   function legendHtml(L) {
-    var codes = {}; L.lanes.forEach(function (l) { (l || '').split(/\s+/).forEach(function (t) { if (t) codes[t[0]] = 1; }); });
+    var codes = {}; (L.lanes || []).forEach(function (l) { (l || '').split(/\s+/).forEach(function (t) { if (t) codes[t[0]] = 1; }); });
     return Object.keys(codes).sort(function (a, b) { return 'FWCKGT'.indexOf(a) - 'FWCKGT'.indexOf(b); }).map(function (c) {
       return '<div class="it' + (L.isNew === c ? ' new' : '') + '"><canvas width="108" height="108" data-b="' + D.BUILD[c].k + '"></canvas>' + D.BUILD[c].name + '</div>';
     }).join('');
@@ -126,47 +113,345 @@
     $('#m-close').onclick = closeModal;
   }
 
+  // ---------- village ----------
+  var vCv = $('#village-canvas');
+  function vResize() {
+    var d = Math.min(2, window.devicePixelRatio || 1), w = vCv.clientWidth, h = vCv.clientHeight;
+    if (!w || !h) return;
+    if (vCv.width !== Math.round(w * d)) { vCv.width = Math.round(w * d); vCv.height = Math.round(h * d); }
+    return { w: w, h: h, d: d };
+  }
+  function buildVillage() {
+    vTool = vTool; vSel = vSel;
+    var html = '';
+    D.VBUILD.forEach(function (b) {
+      if (b.unique) return;
+      var locked = save.unlocked < b.unlock;
+      html += '<button class="v-item' + (vTool === b.code ? ' on' : '') + '" data-tool="' + b.code + '"' + (locked ? ' disabled' : '') + '><canvas width="72" height="72" data-vb="' + b.code + '"></canvas>' + b.name + '<br>' + b.cost + ' Sand</button>';
+    });
+    D.DECOS.forEach(function (d) {
+      html += '<button class="v-item' + (vTool === d.id ? ' on' : '') + '" data-tool="' + d.id + '"><canvas width="72" height="72" data-deco="' + d.id + '"></canvas>' + d.name + '<br>' + d.cost + ' ' + d.cur + '</button>';
+    });
+    $('#v-tray').innerHTML = html;
+    $$('#v-tray [data-vb]').forEach(function (c) { R.drawBuilding(c.getContext('2d'), D.BUILD[c.getAttribute('data-vb')].k, 36, 44, 56, 48, 0.4); });
+    $$('#v-tray [data-deco]').forEach(function (c) { R.drawDeco(c.getContext('2d'), c.getAttribute('data-deco'), 36, 40, 64); });
+    $$('#v-tray [data-tool]').forEach(function (b) {
+      b.onclick = function () { vTool = vTool === b.getAttribute('data-tool') ? null : b.getAttribute('data-tool'); vMoveFrom = null; buildVillage(); };
+    });
+    $('#v-hint').textContent = vMoveFrom ? 'Tap an empty plot to move it.' : vTool ? 'Tap an empty plot to place it.' : 'Tap a plot to build, or tap a building to upgrade, move or sell.';
+    updateWallet();
+  }
+  vCv.addEventListener('pointerdown', function (e) {
+    if (screen !== 'village') return;
+    var rect = vCv.getBoundingClientRect();
+    var cell = R.villageCellAt(e.clientX - rect.left, e.clientY - rect.top);
+    if (!cell) return;
+    Sfx.play('click');
+    if (vMoveFrom) {
+      var err = M.move(save, vMoveFrom.r, vMoveFrom.c, cell.r, cell.c);
+      if (err) toast(err); else { toast('Moved!'); persist(); }
+      vMoveFrom = null; vSel = cell; buildVillage(); return;
+    }
+    var occ = M.vGet(save, cell.r, cell.c);
+    if (vTool && !occ) {
+      var err2 = M.place(save, cell.r, cell.c, vTool);
+      if (err2) toast(err2); else { Sfx.play('coin'); persist(); }
+      vSel = cell; buildVillage(); return;
+    }
+    vSel = cell;
+    if (!occ) { toast('Pick a building in the tray, then tap this plot.'); return; }
+    var title = occ.deco ? (D.DECOS.filter(function (d) { return d.id === occ.id; })[0] || { name: occ.id }).name : D.BUILD[occ.code].name + (occ.lv ? ' · Lv ' + occ.lv : '');
+    var upBtn = (!occ.deco && occ.code) ? '<button class="btn small green" id="v-up">Upgrade</button>' : '';
+    modal('<h2>' + title + '</h2><p class="info">' + (occ.deco ? 'Decoration. Looks pretty, does nothing in a raid.' : (M.vDef(occ.code) || { desc: '' }).desc) + '</p>' +
+      '<div class="btns"><div class="row">' + upBtn + '<button class="btn small blue" id="v-move">Move</button></div>' +
+      (occ.code === 'F' ? '' : '<button class="btn small ghost" id="v-sell">Sell for half</button>') +
+      '<button class="btn small ghost" id="m-close">Close</button></div>');
+    if ($('#v-up')) $('#v-up').onclick = function () { var e = M.upgradeBuilding(save, cell.r, cell.c); if (e) toast(e); else { Sfx.play('coin'); persist(); closeModal(); buildVillage(); } };
+    $('#v-move').onclick = function () { vMoveFrom = cell; vTool = null; closeModal(); buildVillage(); toast('Tap an empty plot.'); };
+    if ($('#v-sell')) $('#v-sell').onclick = function () { var e = M.sell(save, cell.r, cell.c); if (e) toast(e); else { persist(); closeModal(); buildVillage(); } };
+    $('#m-close').onclick = closeModal;
+  });
+
+  // ---------- raid lobby ----------
+  function timeLeft(ms) {
+    ms = Math.max(0, ms); var m = Math.floor(ms / 60000), h = Math.floor(m / 60); m = m % 60;
+    return h ? h + 'h ' + m + 'm' : m + 'm';
+  }
+  function miniVillage(cv, grid) {
+    var x = cv.getContext('2d'), W = cv.width, H = cv.height;
+    x.fillStyle = '#8ED8F0'; x.fillRect(0, 0, W, H);
+    x.fillStyle = '#22B8E0'; x.fillRect(0, 0, W, H * 0.22);
+    x.fillStyle = '#F3D7A0'; x.fillRect(0, H * 0.2, W, H);
+    var tw = W / 7, th = H * 0.72 / 4, oy = H * 0.26;
+    for (var r = 0; r < 4; r++) {
+      var rr = 3 - r;
+      for (var c = 0; c < 7; c++) {
+        var cell = grid[r] && grid[r][c], cx = (c + 0.5) * tw, cy = oy + (rr + 0.55) * th;
+        if (!cell) continue;
+        if (cell.deco) R.drawDeco(x, cell.id, cx, cy, tw * 0.8);
+        else R.drawBuilding(x, D.BUILD[cell.code].k, cx, cy, tw * 0.86, th * 0.9, 0, {});
+      }
+    }
+  }
+  function buildRaid() {
+    var now = Date.now();
+    $('#r-cups').textContent = '\uD83C\uDFC6 ' + (save.trophies || 0);
+    var sh = (save.shieldUntil || 0) > now ? 'Shield up for ' + timeLeft(save.shieldUntil - now) + '. Your village is safe.' : 'No shield. Other captains may raid you while you are away.';
+    $('#r-shield').textContent = sh;
+    var list = M.listOpponents(save);
+    $('#r-list').innerHTML = list.map(function (o, i) {
+      return '<div class="opp" data-opp="' + i + '"><canvas width="168" height="112"></canvas><div><h3>' + o.name + '</h3><p>' + o.trophies + ' cups · power ' + o.power + '</p></div><button class="btn small orange" data-raid="' + i + '">Raid</button></div>';
+    }).join('') || '<p class="shop-note">No beaches left today. Come back tomorrow, or tap New beaches.</p>';
+    $$('#r-list canvas').forEach(function (c, i) { miniVillage(c, list[i].grid); });
+    $$('[data-raid]').forEach(function (b) {
+      b.onclick = function () { Sfx.play('click'); startPvp(list[+b.getAttribute('data-raid')]); };
+    });
+    $('#r-refresh').onclick = function () { Sfx.play('click'); M.refreshOpponents(save); persist(); buildRaid(); };
+    function logLine(r, kind) {
+      var when = new Date(r.t).toLocaleString('en-GB', { hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'short' });
+      if (kind === 'def') {
+        return '<div class="log"><div><b>' + r.name + '</b> ' + (r.win ? 'raided you and stole ' + r.stolen + ' Sand' : 'tried to raid you and failed') + ' (' + (r.delta >= 0 ? '+' : '') + r.delta + ' cups)<br><span style="opacity:.7">' + when + '</span></div>' +
+          '<button class="btn small ghost" data-watch="' + r.id + '">Watch</button>' +
+          '<button class="btn small orange" data-rev="' + r.id + '">Revenge</button></div>';
+      }
+      return '<div class="log"><div>You ' + (r.win ? 'raided' : 'failed to raid') + ' <b>' + r.name + '</b> · ' + (r.trophies >= 0 ? '+' : '') + r.trophies + ' cups · +' + r.sand + ' Sand<br><span style="opacity:.7">' + when + '</span></div></div>';
+    }
+    $('#r-log').innerHTML = (save.raidLog || []).length ? save.raidLog.map(function (r) { return logLine(r, 'def'); }).join('') : '<p class="shop-note">No one has raided you yet.</p>';
+    $('#r-atk').innerHTML = (save.attacks || []).length ? save.attacks.map(function (r) { return logLine(r, 'atk'); }).join('') : '<p class="shop-note">You have not raided anyone yet.</p>';
+    $$('[data-watch]').forEach(function (b) { b.onclick = function () { watchReplay(b.getAttribute('data-watch')); }; });
+    $$('[data-rev]').forEach(function (b) {
+      b.onclick = function () {
+        var rec = (save.raidLog || []).filter(function (r) { return r.id === b.getAttribute('data-rev'); })[0];
+        if (!rec) return;
+        var seed = parseInt(String(rec.botId || '').replace('bot-', ''), 36) || 1;
+        startPvp(M.genBot(seed, rec.trophies || save.trophies), 'Revenge on ' + rec.name);
+      };
+    });
+  }
+
+  // ---------- shop / pass / cards / quests ----------
+  function buildShop() {
+    var ads = [
+      { id: 'daily_gems', name: 'Daily Gems', desc: '+8 Gems for watching a preview video.', ok: !save.adsToday },
+      { id: 'speed_chest', name: 'Ready the free chest', desc: 'Skip the wait on today\u2019s free chest.', ok: !M.chestReady(save) }
+    ];
+    $('#shop-ads').innerHTML = ads.map(function (a) {
+      return '<div class="card"><h3>' + a.name + '</h3><p>' + a.desc + '</p><button class="btn small green" data-ad="' + a.id + '"' + (save.adsRemoved && false ? '' : '') + '>Watch preview</button></div>';
+    }).join('');
+    $$('[data-ad]').forEach(function (b) { b.onclick = function () { watchAd(b.getAttribute('data-ad')); }; });
+    $('#shop-list').innerHTML = M.SHOP.map(function (p) {
+      var owned = (save.bought || {})[p.sku];
+      return '<div class="card"><h3>' + p.name + '</h3><p>' + p.desc + '</p><button class="btn small ' + (p.type === 'gem' ? 'blue' : 'ghost') + '" data-sku="' + p.sku + '"' + (owned && p.once ? ' disabled' : '') + '>' + (owned && p.once ? 'Owned' : p.price) + '</button></div>';
+    }).join('');
+    $$('[data-sku]').forEach(function (b) { b.onclick = function () { buySku(b.getAttribute('data-sku')); }; });
+    updateWallet();
+  }
+  function watchAd(kind) {
+    modal('<h2>Preview video</h2><p>This is a placeholder. In the app a short rewarded ad would play here. Nothing is charged, and no video is loaded.</p><div class="btns"><button class="btn green" id="ad-ok">Pretend I watched</button><button class="btn small ghost" id="m-close">Cancel</button></div>');
+    $('#ad-ok').onclick = function () {
+      closeModal();
+      window.Ads.showRewarded(kind).then(function () {
+        if (kind === 'daily_gems') { if (save.adsToday) { toast('Come back tomorrow.'); return; } save.adsToday = M.dayKey(); M.grant(save, { gems: 8 }, 'ad'); persist(); toast('+8 Gems (preview).'); updateWallet(); }
+        else if (kind === 'speed_chest') { save.dailies.chestAt = Date.now() - 1; persist(); toast('Free chest is ready!'); }
+        else if (kind === 'extra_moves') { /* handled by caller */ }
+      });
+    };
+    $('#m-close').onclick = closeModal;
+  }
+  function buySku(sku) {
+    var p = M.SHOP.filter(function (x) { return x.sku === sku; })[0];
+    if (p && p.type === 'gem') {
+      var r = M.buy(save, sku, false);
+      if (r.err) toast(r.err); else { Sfx.play('coin'); persist(); toast('Bought ' + p.name + '!'); buildShop(); }
+      return;
+    }
+    modal('<h2>' + p.name + '</h2><p>' + p.desc + '</p><p class="tip">Preview only. Nothing will be charged. If you confirm, the items are added to this save so we can test the shop.</p><div class="btns"><button class="btn orange" id="buy-ok">Preview purchase</button><button class="btn small ghost" id="m-close">Cancel</button></div>');
+    $('#buy-ok').onclick = function () {
+      var r = M.buy(save, sku, true);
+      closeModal();
+      if (r.err) toast(r.err); else { Sfx.play('coin'); persist(); toast('Preview: ' + p.name + ' added.'); buildShop(); updateWallet(); }
+    };
+    $('#m-close').onclick = closeModal;
+  }
+  function rewText(r) {
+    if (!r) return '';
+    var bits = [];
+    if (r.sand) bits.push(r.sand + ' Sand');
+    if (r.pearls) bits.push(r.pearls + ' Pearls');
+    if (r.gems) bits.push(r.gems + ' Gems');
+    if (r.chest) bits.push((D.CHESTS[r.chest] || { name: 'Chest' }).name);
+    if (r.skin) bits.push('skin');
+    if (r.hat) bits.push('hat');
+    if (r.deco) bits.push('decoration');
+    if (r.xp) bits.push(r.xp + ' XP');
+    return bits.join(', ') || 'a surprise';
+  }
+  function buildPass() {
+    var tier = M.passTier(save), acc = 0, next = D.PASS[tier] ? D.PASS[tier].xp : 0;
+    for (var i = 0; i < tier; i++) acc += D.PASS[i].xp;
+    var pct = next ? Math.min(100, (save.pass.xp - acc) / next * 100) : 100;
+    $('#pass-status').textContent = (save.pass.premium ? 'Premium track unlocked (preview).' : 'Free track. Premium is a preview and is not charged.') + '  Points: ' + save.pass.xp;
+    $('#pass-xpbar').style.width = pct + '%';
+    $('#pass-track').innerHTML = D.PASS.map(function (row, i) {
+      var freeOk = i < tier, premOk = i < tier && save.pass.premium;
+      var fGot = save.pass.freeClaim.indexOf(i) >= 0, pGot = save.pass.premClaim.indexOf(i) >= 0;
+      return '<div class="pass-row"><div class="n">' + (i + 1) + '</div>' +
+        '<div class="pass-cell">Free<br>' + rewText(row.free) + (fGot ? '<button class="btn small ghost" disabled>Claimed</button>' : '<button class="btn small green" data-pf="' + i + '"' + (freeOk ? '' : ' disabled') + '>Claim</button>') + '</div>' +
+        '<div class="pass-cell prem">Premium<br>' + rewText(row.prem) + (pGot ? '<button class="btn small ghost" disabled>Claimed</button>' : '<button class="btn small blue" data-pp="' + i + '"' + (premOk ? '' : ' disabled') + '>' + (save.pass.premium ? 'Claim' : 'Locked') + '</button>') + '</div></div>';
+    }).join('');
+    $$('[data-pf]').forEach(function (b) { b.onclick = function () { var r = M.claimPass(save, +b.getAttribute('data-pf'), 'free'); if (r.err) toast(r.err); else { Sfx.play('coin'); persist(); buildPass(); updateWallet(); } }; });
+    $$('[data-pp]').forEach(function (b) { b.onclick = function () { var r = M.claimPass(save, +b.getAttribute('data-pp'), 'prem'); if (r.err) toast(r.err); else { Sfx.play('coin'); persist(); buildPass(); updateWallet(); } }; });
+  }
+  function buildCards() {
+    $('#card-list').innerHTML = ['shieldcrab', 'lobster', 'eel', 'spinner', 'puffer'].map(function (id) {
+      var c = save.cards[id], cost = M.cardUpgradeCost(save, id), def = D.TROOPS[id];
+      var pips = ''; for (var i = 0; i < 5; i++) pips += '<i class="' + (i < c.lv ? 'on' : '') + '"></i>';
+      var btn = cost ? '<button class="btn small green" data-card="' + id + '"' + (c.copies >= cost.copies && save.sand >= cost.sand ? '' : ' disabled') + '>Upgrade · ' + cost.copies + ' copies + ' + cost.sand + ' Sand</button>' : '<button class="btn small ghost" disabled>Maxed out</button>';
+      return '<div class="card"><div class="row"><canvas width="96" height="96" data-tr="' + id + '"></canvas><div><h3>' + def.name + ' · Lv ' + c.lv + '</h3><div class="pips">' + pips + '</div><p>' + c.copies + ' copies</p></div></div><p>' + def.desc + ' +20% health and damage per level.</p>' + btn + '</div>';
+    }).join('');
+    $$('#card-list [data-tr]').forEach(function (c) { R.drawTroop(c.getContext('2d'), c.getAttribute('data-tr'), 48, 54, 70, 0.3, { brute: save.cards[c.getAttribute('data-tr')].lv >= 4, hat: save.cosmetics.hat }); });
+    $$('[data-card]').forEach(function (b) { b.onclick = function () { if (M.upgradeCard(save, b.getAttribute('data-card'))) { Sfx.play('coin'); persist(); buildCards(); updateWallet(); toast('Troop upgraded!'); } }; });
+    $('#meta-up').innerHTML = D.UPGRADES.filter(function (u) { return !D.TROOPS[u.id]; }).map(function (u) {
+      var lv = save.up[u.id] || u.start, idx = lv - u.start, cost = u.cost[idx];
+      var pips = ''; for (var i = u.start; i < u.max; i++) pips += '<i class="' + (i < lv ? 'on' : '') + '"></i>';
+      var btn = cost == null ? '<button class="btn small ghost" disabled>Maxed out</button>' : '<button class="btn small ' + (u.cur === 'pearls' ? 'blue' : 'green') + '" data-mu="' + u.id + '"' + (save[u.cur] >= cost ? '' : ' disabled') + '>Upgrade · ' + cost + ' ' + u.cur + '</button>';
+      return '<div class="card"><h3>' + u.name + '</h3><div class="pips">' + pips + '</div><p>' + u.desc + '</p>' + btn + '</div>';
+    }).join('');
+    $$('[data-mu]').forEach(function (b) { b.onclick = function () { if (M.upgradeMeta(save, b.getAttribute('data-mu'))) { Sfx.play('coin'); persist(); buildCards(); updateWallet(); } else toast('Cannot afford that.'); }; });
+    updateWallet();
+  }
+  function buildQuests() {
+    var st = save.dailies.streak || 1;
+    $('#streak-row').innerHTML = D.STREAK.map(function (r, i) {
+      var on = i === st - 1, claimed = save.dailies.claimed && on;
+      return '<div class="streak-day' + (on ? ' on' : '') + (claimed ? ' claimed' : '') + '"><b>Day ' + (i + 1) + '</b><br>' + rewText(r) + '</div>';
+    }).join('') + (save.dailies.claimed ? '' : '<button class="btn small orange" id="claim-streak">Claim today</button>');
+    if ($('#claim-streak')) $('#claim-streak').onclick = function () { var g = M.claimStreak(save); if (g) { Sfx.play('coin'); persist(); showRew('Daily login, day ' + st, g); buildQuests(); } };
+    $('#quest-list').innerHTML = (save.dailies.quests || []).map(function (q) {
+      var btn = q.claimed ? '<button class="btn small ghost" disabled>Claimed</button>' : q.done ? '<button class="btn small green" data-cq="' + q.id + '">Claim</button>' : '<button class="btn small ghost" disabled>' + q.progress + ' / ' + q.target + '</button>';
+      return '<div class="card"><h3>' + q.title + '</h3><p>' + rewText(q.reward) + '</p>' + btn + '</div>';
+    }).join('');
+    $$('[data-cq]').forEach(function (b) { b.onclick = function () { var g = M.claimQuest(save, b.getAttribute('data-cq')); if (g) { Sfx.play('quest'); persist(); showRew('Quest complete', g); buildQuests(); } }; });
+    var ready = M.chestReady(save);
+    var left = Math.max(0, (save.dailies.chestAt || 0) - Date.now());
+    $('#free-chest').innerHTML = '<div class="card"><h3>Beach Chest</h3><p>' + (ready ? 'Ready to open!' : 'Ready in ' + timeLeft(left)) + '</p><button class="btn ' + (ready ? 'orange' : 'ghost') + '" id="free-open"' + (ready ? '' : ' disabled') + '>' + (ready ? 'Open' : 'Waiting') + '</button></div>';
+    if ($('#free-open')) $('#free-open').onclick = function () { var c = M.collectFreeChest(save); if (c) { persist(); openChest(c.id); buildQuests(); } };
+    updateWallet();
+  }
+  function showRew(title, g) {
+    var bits = [];
+    if (g.sand) bits.push('+' + g.sand + ' Sand');
+    if (g.pearls) bits.push('+' + g.pearls + ' Pearls');
+    if (g.gems) bits.push('+' + g.gems + ' Gems');
+    if (g.copies && g.copies.length) bits.push(g.copies.length + ' card copies');
+    if (g.chests && g.chests.length) bits.push('a chest');
+    if (g.cosmetics && g.cosmetics.length) bits.push(g.cosmetics.join(', '));
+    if (g.xp) bits.push('+' + g.xp + ' XP');
+    toast(title + ': ' + (bits.join(', ') || 'Nice!') , 2800);
+    updateWallet();
+    if (g.levelUps && g.levelUps.length) showLevelUps(g.levelUps);
+  }
+  function showLevelUps(ups) {
+    if (!ups || !ups.length) return;
+    Sfx.play('levelup');
+    var u = ups[0];
+    modal('<h2>Level ' + u.level + '!</h2><p>Your crew is growing.</p><p class="tip">Bonus: ' + rewText(u.bonus) + '</p><div class="btns"><button class="btn orange" id="m-close">Hooray</button></div>');
+    $('#m-close').onclick = function () { closeModal(); if (ups.length > 1) showLevelUps(ups.slice(1)); };
+  }
+  function openChest(id) {
+    var got = M.openChest(save, id); if (!got) return;
+    persist(); Sfx.play('chest');
+    modal('<h2>' + (D.CHESTS[got.chest.type] || { name: 'Chest' }).name + '</h2><div class="chest-open">\uD83C\uDF81</div><p>' +
+      (got.sand ? '+' + got.sand + ' Sand<br>' : '') +
+      (got.pearls ? '+' + got.pearls + ' Pearls<br>' : '') +
+      (got.gems ? '+' + got.gems + ' Gems<br>' : '') +
+      (got.copies && got.copies.length ? got.copies.length + ' card copies' : '') + '</p>' +
+      '<div class="btns"><button class="btn orange" id="m-close">Lovely</button></div>', 'win');
+    $('#m-close').onclick = closeModal;
+    updateWallet();
+  }
+
   // ---------- game ----------
+  var TUT = [
+    { sp: 'board', text: 'Swipe two treasures to make a line of three. That is how every turn starts.' },
+    { sp: 'lanes', text: 'A match sends a troop up that column. Watch your crabs walk up the lane!' },
+    { sp: 'castle', text: 'Each building has a health bar. When it hits 0, it crumbles. Numbers on towers count down to a shot.' },
+    { sp: 'flagbar', text: 'This bar is the Flag Tower\u2019s health. Drop it to zero to win the raid. Go on, Captain!' }
+  ];
   function start(i, seed) {
+    pendingOpp = null; replay = null;
     s = E.newState(i, save.up, seed == null ? (Date.now() & 0xffffff) : seed);
+    afterStart(D.LEVELS[i] ? D.LEVELS[i].name : 'Raid', 'Raid ' + (i + 1));
+    if (i === 0 && !save.seen.tutorial) { tutStep = 0; showTut(); } else { tutStep = 99; $('#coach').hidden = true; R.spotlight = null; }
+  }
+  function startPvp(opp, title) {
+    pendingOpp = opp; replay = null;
+    var moves = 20 + Math.min(6, opp.power || 1) + (save.up.harbour || 0);
+    s = E.newStateSpec({ lanes: E.villageToLanes(opp.grid), moves: moves - (save.up.harbour || 0), up: save.up, seed: Date.now() & 0xffffff, mode: 'pvp', title: title || ('Raid ' + opp.name) });
+    afterStart(s.title, 'PvP');
+    $('#coach').hidden = true; R.spotlight = null; tutStep = 99;
+  }
+  function watchReplay(id) {
+    var rec = (save.raidLog || []).filter(function (r) { return r.id === id; })[0];
+    if (!rec || !rec.snap) { toast('Replay is missing.'); return; }
+    replay = { moves: rec.moves || [], i: 0, rec: rec };
+    s = E.newStateSpec({ lanes: E.villageToLanes(rec.snap), moves: 24, up: { shieldcrab: 2, lobster: 2, eel: 2, spinner: 2, puffer: 2 }, seed: rec.seed || 1, mode: 'replay', title: rec.name + ' raids you' });
+    afterStart(s.title, 'Replay');
+    $('#coach').hidden = true; R.spotlight = null;
+    runReplay();
+  }
+  async function runReplay() {
+    busy = true;
+    await wait(800);
+    while (replay && replay.i < replay.moves.length && s && s.status === 'play') {
+      var m = replay.moves[replay.i++];
+      await runMove(m[0], m[1], true);
+    }
+    busy = false;
+    if (s && s.status === 'play') s.status = replay.rec.win ? 'won' : 'lost';
+    await wait(600); result();
+  }
+  function afterStart(name, label) {
     R.reset(); busy = false; extraUsed = false; idleT = 0;
     show('game');
-    hud();
-    R.showBanner('Raid ' + (i + 1), D.LEVELS[i].name);
-    if (!save.seen['tip' + i] && (i < 4 || D.LEVELS[i].isNew)) coach(D.LEVELS[i].tip, i);
-    else $('#coach').hidden = true;
+    hud(name, label);
+    R.showBanner(label, name);
   }
-  function coach(text, i) {
-    var c = $('#coach'); c.style.top = Math.round(R.view.bfTop + 4) + 'px'; c.style.bottom = 'auto'; c.innerHTML = '<span>' + text + '</span><button class="btn small blue">Got it</button>'; c.hidden = false;
-    c.querySelector('button').onclick = function () { c.hidden = true; save.seen['tip' + i] = 1; persist(); };
+  function showTut() {
+    var step = TUT[tutStep]; if (!step) { $('#coach').hidden = true; R.spotlight = null; save.seen.tutorial = 1; persist(); return; }
+    R.spotlight = step.sp;
+    var c = $('#coach');
+    c.style.top = 'auto'; c.style.bottom = 'calc(14px + env(safe-area-inset-bottom,0px))';
+    c.innerHTML = '<span>' + step.text + '</span><button class="btn small blue" id="tut-next">' + (tutStep === TUT.length - 1 ? 'Let\u2019s raid!' : 'Next') + '</button>';
+    c.hidden = false;
+    $('#tut-next').onclick = function () { tutStep++; showTut(); };
   }
-  function hud() {
+  function hud(name, label) {
     if (!s) return;
-    $('#h-level').textContent = 'Raid ' + (s.level + 1);
-    $('#h-name').textContent = D.LEVELS[s.level].name;
+    $('#h-level').textContent = label || (s.mode === 'pvp' ? 'Raid' : 'Raid ' + ((s.level || 0) + 1));
+    $('#h-name').textContent = name || s.title || (D.LEVELS[s.level] || { name: 'Raid' }).name;
     $('#h-moves').textContent = s.moves;
     $('#h-moves-chip').classList.toggle('low', s.moves <= 3 && s.status === 'play');
   }
   $('#h-pause').onclick = function () {
     if (!s) return; Sfx.play('click');
-    modal('<h2>Paused</h2><div class="info"><p><b>How it works</b></p><p>Match 3 to send a troop up <b>that column</b>. Match 4 for a Brute. L/T shapes drop a Pearl Bomb, 5 in a row makes a Riptide.</p><p>Each troop strikes 3 times, then heads home. Numbers on enemy towers show how many turns until they fire.</p><p>Tap an enemy building to learn what it does.</p></div>' +
+    modal('<h2>Paused</h2><div class="info"><p><b>How it works</b></p><p>Match 3 to send a troop up <b>that column</b>. Match 4 for a Brute. L/T shapes drop a Pearl Bomb, 5 in a row makes a Riptide.</p><p>Health bars sit under every crab and every building. The golden bar at the top is the <b>Flag Tower</b> — drop it to zero to win.</p><p>Numbers on enemy towers show how many turns until they fire. Tap a building to learn what it does.</p></div>' +
       '<div class="btns"><button class="btn green" id="p-resume">Resume</button><div class="row"><button class="btn small ghost" id="p-snd">Sound: ' + (save.sound ? 'on' : 'off') + '</button><button class="btn small ghost" id="p-mus">Music: ' + (save.music ? 'on' : 'off') + '</button></div><div class="row"><button class="btn small blue" id="p-restart">Restart</button><button class="btn small orange" id="p-map">Leave raid</button></div></div>');
     $('#p-resume').onclick = closeModal;
     $('#p-snd').onclick = function () { save.sound = !save.sound; Sfx.set('sound', save.sound); persist(); this.textContent = 'Sound: ' + (save.sound ? 'on' : 'off'); soundLabels(); };
     $('#p-mus').onclick = function () { save.music = !save.music; Sfx.set('music', save.music); persist(); this.textContent = 'Music: ' + (save.music ? 'on' : 'off'); soundLabels(); };
-    $('#p-restart').onclick = function () { closeModal(); start(s.level); };
-    $('#p-map').onclick = function () { closeModal(); s = null; show('map'); };
+    $('#p-restart').onclick = function () { closeModal(); if (pendingOpp) startPvp(pendingOpp); else start(s.level); };
+    $('#p-map').onclick = function () { closeModal(); s = null; show(pendingOpp ? 'raid' : 'map'); };
   };
 
-  // input
   var cv = $('#game');
   function pt(e) { return { x: e.clientX, y: e.clientY }; }
   cv.addEventListener('pointerdown', function (e) {
-    if (screen !== 'game' || !s || s.status !== 'play') return;
+    if (screen !== 'game' || !s || s.status !== 'play' || replay) return;
     var p = pt(e), cell = R.cellAt(p.x, p.y); idleT = 0; R.hint = null;
     if (!cell) {
       var st = R.structAt(s, p.x, p.y);
-      if (st) { var d = D.BUILD[st.b.code]; toast(d.name + ' (' + Math.ceil(st.b.hp) + ' HP): ' + d.desc + (st.b.cd ? ' Fires in ' + st.b.t + '.' : ''), 3600); }
+      if (st) { var d = D.BUILD[st.b.code]; toast(d.name + ' (' + Math.ceil(st.b.hp) + ' / ' + Math.ceil(st.b.max) + ' HP): ' + d.desc + (st.b.cd ? ' Fires in ' + st.b.t + ' turn' + (st.b.t === 1 ? '' : 's') + '.' : ''), 3600); }
       R.sel = null; R.lane = -1; return;
     }
     if (busy) return;
@@ -175,7 +460,7 @@
     try { cv.setPointerCapture(e.pointerId); } catch (er) {}
   });
   cv.addEventListener('pointermove', function (e) {
-    if (!drag || busy) return;
+    if (!drag || busy || replay) return;
     var p = pt(e), dx = p.x - drag.x, dy = p.y - drag.y, th = R.view.ts * 0.32;
     if (Math.max(Math.abs(dx), Math.abs(dy)) < th) return;
     var b = Math.abs(dx) > Math.abs(dy) ? [drag.cell[0], drag.cell[1] + (dx > 0 ? 1 : -1)] : [drag.cell[0] + (dy > 0 ? 1 : -1), drag.cell[1]];
@@ -187,7 +472,7 @@
   cv.addEventListener('pointercancel', function () { drag = null; });
 
   function attempt(a, b) {
-    if (busy || !s || s.status !== 'play') return;
+    if (busy || !s || s.status !== 'play' || replay) return;
     if (!E.validSwap(s, a, b)) {
       var why = !E.swappable(s, a) || !E.swappable(s, b);
       Sfx.play('bad'); R.lane = -1;
@@ -196,6 +481,7 @@
       wait(150).then(function () { E.swap(s, a, b); return wait(150); }).then(function () { busy = false; });
       return;
     }
+    if (tutStep === 0 && !save.seen.tutorial) { tutStep = 1; showTut(); }
     runMove(a, b);
   }
 
@@ -211,8 +497,9 @@
   function hitFx(e) {
     var p = structPos(e.id, e.lane), vs = R.svis[e.id];
     if (vs) vs.flash = 0.25;
-    R.float(p.x, p.y - 10, '-' + fmt(e.dmg), '#FFE36E', 20);
+    R.float(p.x, p.y - 10, '-' + fmt(e.dmg), '#FFE36E', 22);
     Sfx.play('hit');
+    if (e.k === 'flag' && R._hp) R._hp.pulse = 1;
     if (e.killed) {
       if (vs) vs.dead = true;
       R.burst(p.x, p.y, '#F2D497', 22, 1.3); R.burst(p.x, p.y, '#A67A3A', 8, 1);
@@ -234,8 +521,9 @@
     } else if (e.type === 'hit') hitFx(e);
   }
 
-  async function runMove(a, b) {
-    busy = true; R.sel = null; R.lane = -1; R.hint = null; $('#coach').hidden = true;
+  async function runMove(a, b, fromReplay) {
+    busy = true; R.sel = null; R.lane = -1; R.hint = null;
+    if (!fromReplay && tutStep < 99 && tutStep !== 0) { /* keep coach until they dismiss */ }
     E.swap(s, a, b); s.moves--; hud(); Sfx.play('swap');
     await wait(180);
     var combo = 0, hint = b;
@@ -251,8 +539,10 @@
         R.tvis[d.troop.id] = { x: p.x, y: p.y, hp: d.troop.hp, a: 1, seed: d.troop.id * 1.7, tr: d.troop, gone: 0 };
         if (d.troop.brute) R.float(p.x, p.y - 16, 'BRUTE ' + D.TROOPS[d.troop.k].name + '!', '#FFD23F', 20);
         Sfx.play(d.troop.brute ? 'brute' : 'deploy');
+        if (tutStep === 1) { tutStep = 2; if (!save.seen.tutorial) showTut(); }
       });
       st.events.forEach(spellFx);
+      if (st.events.some(function (e) { return e.type === 'hit'; }) && tutStep === 2) { tutStep = 3; if (!save.seen.tutorial) showTut(); }
       if (combo >= 1) { var cp = R.cellXY(3, 3); R.float(cp.x, cp.y, 'Combo x' + (combo + 1) + '!', '#FF8A2B', 26 + combo * 3); }
       await wait(260);
       E.gravity(s);
@@ -270,18 +560,15 @@
     if (s.status === 'play' && !E.findMove(s)) { E.shuffle(s); R.vis = {}; toast('No moves left, reshuffling the beach!'); }
     hud();
     busy = false;
-    if (s.status !== 'play') { await wait(s.status === 'won' ? 900 : 500); result(); }
+    if (!fromReplay && s.status !== 'play') { await wait(s.status === 'won' ? 900 : 500); result(); }
   }
 
   async function enemy(ev) {
     var marched = false;
-    for (var i = 0; i < ev.length; i++) {
-      var e = ev[i];
-      if (e.type === 'move' || e.type === 'scuttle') { if (!marched) { Sfx.play('march'); marched = true; } }
-    }
+    for (var i = 0; i < ev.length; i++) { if (ev[i].type === 'move' || ev[i].type === 'scuttle') { if (!marched) { Sfx.play('march'); marched = true; } } }
     if (marched) await wait(330);
     for (i = 0; i < ev.length; i++) {
-      e = ev[i];
+      var e = ev[i];
       if (e.type === 'attack') { var vt = R.tvis[e.id]; if (vt) vt.lunge = 1; await wait(90); }
       else if (e.type === 'hit') hitFx(e);
       else if (e.type === 'pop') { var p = troopPos(e.id); if (p) { R.burst(p.x, p.y, '#FFD23F', 18, 1.2); R.ring(p.x, p.y, '#FFF3A6', 140); } Sfx.play('puff'); if (R.tvis[e.id]) R.tvis[e.id].dying = 'fade'; }
@@ -299,8 +586,8 @@
           Sfx.play('cannon');
           fire(e.k === 'cat' ? 'coco' : 'ball', from, to, 0.42, function () {
             ids.forEach(function (id) {
-              var vt = R.tvis[id], p = troopPos(id);
-              if (vt) { vt.hurt = 0.4; var alive = s.troops.filter(function (t) { return t.id === id; })[0]; if (!alive) { vt.hp = 0; vt.dying = 'fade'; } }
+              var vt2 = R.tvis[id], p = troopPos(id);
+              if (vt2) { vt2.hurt = 0.4; var alive = s.troops.filter(function (t) { return t.id === id; })[0]; if (!alive) { vt2.hp = 0; vt2.dying = 'fade'; } }
               if (p) { R.float(p.x, p.y - 14, '-' + fmt(e.dmg), '#FF6B6B', 18); R.burst(p.x, p.y, e.k === 'cat' ? '#8D6E63' : '#455A64', 8, 0.8); }
             });
             Sfx.play('hit'); R.shake = Math.max(R.shake, 5);
@@ -309,19 +596,19 @@
           if (e.type === 'gull') Sfx.play('click'); else Sfx.play('cannon');
           e.drops.forEach(function (d) {
             R.held[d.id] = 1; R.keep[d.old] = 1;
-            var to = R.cellXY(d.r, d.c);
-            fire(e.type === 'gull' ? 'gull' : 'sand', from, to, e.type === 'gull' ? 0.6 : 0.5, function () {
+            var to2 = R.cellXY(d.r, d.c);
+            fire(e.type === 'gull' ? 'gull' : 'sand', from, to2, e.type === 'gull' ? 0.6 : 0.5, function () {
               delete R.held[d.id]; delete R.keep[d.old];
               R.vis[d.id] = { x: d.c, y: d.r, vy: 0, sc: 0.3 };
-              R.burst(to.x, to.y, '#D9AE66', 10, 0.9); Sfx.play('splat');
+              R.burst(to2.x, to2.y, '#D9AE66', 10, 0.9); Sfx.play('splat');
             });
           });
         } else if (e.type === 'glue') {
           Sfx.play('cannon');
           e.locks.forEach(function (d) {
             R.heldLock[d.id] = 1;
-            var to = R.cellXY(d.r, d.c);
-            fire('barn', from, to, 0.5, function () { delete R.heldLock[d.id]; R.burst(to.x, to.y, '#B0BEC5', 10, 0.9); Sfx.play('splat'); });
+            var to3 = R.cellXY(d.r, d.c);
+            fire('barn', from, to3, 0.5, function () { delete R.heldLock[d.id]; R.burst(to3.x, to3.y, '#B0BEC5', 10, 0.9); Sfx.play('splat'); });
           });
         }
       })(shots[i]);
@@ -332,73 +619,109 @@
   }
 
   function result() {
-    var L = D.LEVELS[s.level], i = s.level;
+    if (s.mode === 'replay') {
+      var rec = replay && replay.rec;
+      modal('<h2 class="' + ((rec && rec.win) ? 'lose' : '') + '">' + ((rec && rec.win) ? 'They toppled your flag' : 'You held the beach!') + '</h2><p>' + (rec && rec.win ? rec.name + ' stole ' + rec.stolen + ' Sand.' : 'Your defences stood firm.') + '</p><div class="btns"><button class="btn orange" id="r-map">Back to raids</button></div>');
+      $('#r-map').onclick = function () { closeModal(); s = null; replay = null; show('raid'); };
+      return;
+    }
     if (s.status === 'won') {
-      var stars = E.stars(s), prev = save.stars[i] || 0, first = i >= save.unlocked && !prev;
-      var sand = Math.round((30 + 10 * i + 10 * stars + s.loot) * (1 + 0.1 * ((save.up.castle || 1) - 1)));
-      var pearls = Math.max(0, stars - prev) + (first ? 1 : 0);
-      save.sand += sand; save.pearls += pearls; save.stars[i] = Math.max(prev, stars);
-      save.unlocked = Math.min(D.LEVELS.length - 1, Math.max(save.unlocked, i + 1));
-      if (i === D.LEVELS.length - 1) save.beaten = true;
+      var stars = E.stars(s);
+      var rew = pendingOpp ? M.pvpReward(save, s, stars, pendingOpp) : M.campaignReward(save, s, stars);
       persist(); Sfx.play('win');
+      if (pendingOpp) M.recordAttack(save, pendingOpp, s, rew);
+      persist();
       var st = ''; for (var k = 0; k < 3; k++) st += '<span class="' + (k < stars ? 'on' : '') + '">\u2605</span>';
-      var next = i + 1 < D.LEVELS.length;
+      var next = !pendingOpp && s.level + 1 < D.LEVELS.length;
       modal('<h2>Castle toppled!</h2><div class="stars">' + st + '</div><p>' + (s.charge ? 'Won in the final charge!' : s.moves + ' moves to spare') + ' &middot; ' + s.stats.troops + ' troops sent</p>' +
-        '<div class="rewards"><span class="chip"><i class="ico-sand"></i>+' + sand + '</span>' + (pearls ? '<span class="chip"><i class="ico-pearl"></i>+' + pearls + '</span>' : '') + '</div>' +
-        (i === D.LEVELS.length - 1 ? '<p class="tip">You beat the great Clawcastle! Replay raids for 3 stars and max out your beach.</p>' : '') +
-        '<div class="btns">' + (next ? '<button class="btn big orange" id="r-next">Next raid</button>' : '') + '<div class="row"><button class="btn small blue" id="r-base">Home Beach</button><button class="btn small green" id="r-again">Replay</button></div><button class="btn small ghost" id="r-map">Map</button></div>', 'win');
-      if (next) $('#r-next').onclick = function () { closeModal(); intro(i + 1); };
+        '<div class="rewards"><span class="chip"><i class="ico-sand"></i>+' + rew.sand + '</span>' +
+        (rew.pearls ? '<span class="chip"><i class="ico-pearl"></i>+' + rew.pearls + '</span>' : '') +
+        (rew.trophies ? '<span class="chip cups">' + (rew.trophies > 0 ? '+' : '') + rew.trophies + ' cups</span>' : '') +
+        (rew.xp ? '<span class="chip">+' + rew.xp + ' XP</span>' : '') + '</div>' +
+        (rew.copies && rew.copies.length ? '<p>Card copies: ' + rew.copies.join(', ') + '</p>' : '') +
+        (rew.chest ? '<p class="tip">You earned a ' + (D.CHESTS[rew.chest.type] || { name: 'chest' }).name + '!</p>' : '') +
+        '<div class="btns">' + (rew.chest ? '<button class="btn big orange" id="r-chest">Open chest</button>' : '') +
+        (next ? '<button class="btn ' + (rew.chest ? 'small' : 'big') + ' orange" id="r-next">Next raid</button>' : '') +
+        '<div class="row"><button class="btn small blue" id="r-base">' + (pendingOpp ? 'Village' : 'Village') + '</button><button class="btn small green" id="r-again">Replay</button></div><button class="btn small ghost" id="r-map">Map</button></div>', 'win');
+      if (rew.chest) $('#r-chest').onclick = function () { closeModal(); openChest(rew.chest.id); };
+      if (next) $('#r-next').onclick = function () { closeModal(); intro(s.level + 1); };
+      if (rew.levelUps && rew.levelUps.length) { /* show after they close chest or later */ }
     } else {
       Sfx.play('lose');
       var f = E.flag(s);
+      if (pendingOpp) {
+        var rew2 = M.pvpReward(save, s, 0, pendingOpp);
+        M.recordAttack(save, pendingOpp, s, rew2); persist();
+      }
       modal('<h2 class="lose">The tide turned...</h2><p>The Flag Tower held with <b>' + (f ? Math.ceil(f.hp) : 0) + ' HP</b> left.</p>' +
-        '<p class="tip">Tip: send troops up the flag\'s column, take out cannons that cover it, and upgrade your crew at Home Beach.</p>' +
-        '<div class="btns">' + (extraUsed ? '' : '<button class="btn green" id="r-extra">+3 moves (free while ads are off)</button>') + '<div class="row"><button class="btn small orange" id="r-again">Try again</button><button class="btn small blue" id="r-base">Home Beach</button></div><button class="btn small ghost" id="r-map">Map</button></div>', 'lose');
-      if (!extraUsed) $('#r-extra').onclick = function () {
-        window.Ads.showRewarded('extra_moves').then(function () { extraUsed = true; closeModal(); s.status = 'play'; s.moves += 3; s.charge = 0; hud(); toast('+3 moves! (A rewarded ad will go here in the app.)'); });
+        '<p class="tip">Tip: send troops up the flag\u2019s column, take out cannons that cover it, and upgrade your army and village.</p>' +
+        '<div class="btns">' + (extraUsed || pendingOpp ? '' : '<button class="btn green" id="r-extra">+3 moves (preview ad)</button>') +
+        '<div class="row"><button class="btn small orange" id="r-again">Try again</button><button class="btn small blue" id="r-base">Village</button></div><button class="btn small ghost" id="r-map">Map</button></div>', 'lose');
+      if ($('#r-extra')) $('#r-extra').onclick = function () {
+        modal('<h2>Preview video</h2><p>A rewarded ad would play here in the app. Nothing is charged.</p><div class="btns"><button class="btn green" id="ad-ok">Pretend I watched</button><button class="btn small ghost" id="m-close">Cancel</button></div>');
+        $('#ad-ok').onclick = function () { extraUsed = true; closeModal(); s.status = 'play'; s.moves += 3; s.charge = 0; hud(); toast('+3 moves! (Preview — a rewarded ad will go here in the app.)'); };
+        $('#m-close').onclick = closeModal;
       };
     }
-    $('#r-again').onclick = function () { closeModal(); start(i); };
-    $('#r-base').onclick = function () { closeModal(); s = null; show('base'); };
-    $('#r-map').onclick = function () { closeModal(); s = null; show('map'); };
+    if ($('#r-again')) $('#r-again').onclick = function () { closeModal(); if (pendingOpp) startPvp(pendingOpp); else start(s.level); };
+    if ($('#r-base')) $('#r-base').onclick = function () { closeModal(); s = null; show('village'); };
+    if ($('#r-map')) $('#r-map').onclick = function () { closeModal(); s = null; show(pendingOpp ? 'raid' : 'map'); };
+    updateWallet();
   }
 
   // ---------- loop ----------
-  var last = performance.now(), T = 0, bctx = baseCv.getContext('2d');
+  var last = performance.now(), T = 0, bctx = vCv.getContext('2d');
   function loop(now) {
     var dt = Math.min(0.05, (now - last) / 1000); last = now; T += dt;
     if (screen === 'game' && s) {
       R.frame(s, T, dt);
       idleT += dt;
-      if (idleT > 6 && !busy && s.status === 'play' && !R.hint) { R.hint = E.findMove(s); }
+      if (idleT > 6 && !busy && s.status === 'play' && !R.hint && !replay) { R.hint = E.findMove(s); }
     } else {
-      var ctx = cv.getContext('2d'), v = R.view, dpr = cv.width / v.W;
+      var ctx = cv.getContext('2d'), v = R.view, dpr = cv.width / Math.max(1, v.W);
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       R.drawScene(ctx, v.W, v.H, T, save.up, screen === 'title' ? { seaY: 0.12, castleY: 0.1, scale: 0.16 } : { seaY: 0.22, castleY: 0.17, scale: 0.1 });
-      if (screen === 'base') {
-        var bw = baseCv.clientWidth, bh = baseCv.clientHeight, d2 = Math.min(2, window.devicePixelRatio || 1);
-        if (baseCv.width !== Math.round(bw * d2)) { baseCv.width = Math.round(bw * d2); baseCv.height = Math.round(bh * d2); }
-        bctx.setTransform(d2, 0, 0, d2, 0, 0);
-        R.drawScene(bctx, bw, bh, T, save.up, { seaY: 0.12, castleY: 0.3, scale: 0.17 });
+      if (screen === 'village') {
+        var sz = vResize();
+        if (sz) {
+          bctx.setTransform(sz.d, 0, 0, sz.d, 0, 0);
+          R.drawVillage(bctx, save.village.grid, { W: sz.w, H: sz.h, t: T, sel: vSel, skin: save.cosmetics.skin || 'default' });
+        }
       }
     }
     requestAnimationFrame(loop);
   }
-  window.addEventListener('resize', function () { R.resize(); R.vis = {}; });
+  window.addEventListener('resize', function () { R.resize(); R.vis = {}; if (screen === 'village') vResize(); });
 
-  // ---------- boot ----------
   R.init(cv);
   Sfx.set('sound', save.sound); Sfx.set('music', save.music); soundLabels();
   show('title');
   requestAnimationFrame(loop);
   if (document.fonts && document.fonts.load) document.fonts.load('20px "Lilita One"');
 
-  // test / debug hooks
+  // first-session welcome / streak
+  if (bootEvents.login && !save.seen.welcome) {
+    save.seen.welcome = 1; persist();
+    setTimeout(function () {
+      modal('<h2>Welcome to the beach!</h2><p>Match treasures at the bottom to send crabs up each lane and topple the Flag Tower. Between raids, build your own sandcastle village — and raid the beaches of other captains.</p><div class="btns"><button class="btn big orange" id="w-play">Start the first raid</button><button class="btn small ghost" id="m-close">I\u2019ll look around</button></div>');
+      $('#w-play').onclick = function () { closeModal(); show('map'); intro(0); };
+      $('#m-close').onclick = closeModal;
+    }, 500);
+  } else if (bootEvents.login && !save.dailies.claimed) {
+    setTimeout(function () { show('quests'); }, 400);
+  }
+  if (bootEvents.incoming && bootEvents.incoming.length) {
+    setTimeout(function () {
+      var n = bootEvents.incoming.length, stole = bootEvents.incoming.reduce(function (a, r) { return a + (r.stolen || 0); }, 0);
+      toast((n === 1 ? 'Someone raided your village!' : n + ' captains raided your village!') + (stole ? ' They stole ' + stole + ' Sand.' : ''), 4000);
+    }, 900);
+  }
+
   window.__cc = {
     get state() { return s; }, get screen() { return screen; }, get busy() { return busy; }, get save() { return save; },
-    set fast(v) { FAST = !!v; }, E: E, start: start, show: show, intro: intro,
+    set fast(v) { FAST = !!v; }, E: E, M: M, start: start, startPvp: startPvp, show: show, intro: intro,
     botMove: function () { if (!s || busy || s.status !== 'play') return false; var m = E.botMove(s); if (!m) return false; runMove(m[0], m[1]); return true; },
-    attempt: attempt,
-    reset: function () { save = defaults(); persist(); }
+    attempt: attempt, openChest: openChest,
+    reset: function () { save = M.defaults(); persist(); }
   };
 })();

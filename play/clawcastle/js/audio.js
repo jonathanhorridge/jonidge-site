@@ -47,7 +47,10 @@
     coin: function () { tone(988, 0.08, 'square', 0.08); tone(1319, 0.2, 'square', 0.08, 1, ac.currentTime + 0.08); },
     win: function () { [523, 659, 784, 1047, 784, 1047].forEach(function (f, i) { tone(f, 0.25, 'triangle', 0.22, 1, ac.currentTime + i * 0.11); }); },
     lose: function () { [392, 349, 311, 262].forEach(function (f, i) { tone(f, 0.35, 'triangle', 0.2, 0.97, ac.currentTime + i * 0.18); }); },
-    flag: function () { [784, 988, 1175, 1568].forEach(function (f, i) { tone(f, 0.3, 'square', 0.1, 1, ac.currentTime + i * 0.07); }); noise(0.7, 0.3, 500, 0.7, null, 100); }
+    flag: function () { [784, 988, 1175, 1568].forEach(function (f, i) { tone(f, 0.3, 'square', 0.1, 1, ac.currentTime + i * 0.07); }); noise(0.7, 0.3, 500, 0.7, null, 100); },
+    levelup: function () { [523, 659, 784, 1047, 1319].forEach(function (f, i) { tone(f, 0.22, 'triangle', 0.2, 1, ac.currentTime + i * 0.08); }); },
+    chest: function () { tone(392, 0.1, 'square', 0.1); tone(523, 0.15, 'square', 0.1, 1, ac.currentTime + 0.1); tone(784, 0.3, 'triangle', 0.18, 1, ac.currentTime + 0.22); noise(0.2, 0.1, 2000, 2); },
+    quest: function () { tone(880, 0.1, 'sine', 0.16); tone(1175, 0.2, 'sine', 0.16, 1, ac.currentTime + 0.1); }
   };
   // music: C-major pentatonic steel-drum riff, 100 bpm
   var MEL = [0, 2, 4, 7, 4, 2, 9, 7, 0, 4, 7, 9, 12, 9, 7, 4], BASS = [0, 0, 7, 7, 5, 5, 7, 7], SC = [0, 2, 4, 5, 7, 9, 11, 12];

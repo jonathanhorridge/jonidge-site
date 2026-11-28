@@ -43,42 +43,122 @@
   <div class="title-wrap">
     <div class="logo"><span class="l1">Claw</span><span class="l2">castle</span></div>
     <p class="tagline">Match the beach. Rally the crabs. Storm the sandcastle!</p>
-    <button class="btn big orange" data-go="map">Raid!</button>
-    <button class="btn blue" data-go="base">Home Beach</button>
+    <div class="player-chip" id="t-player"><span class="lv">Lv 1</span><span class="xp"><i style="width:0%"></i></span></div>
+    <div class="title-grid">
+      <button class="btn big orange" data-go="map">Campaign</button>
+      <button class="btn big blue" data-go="village">Village</button>
+      <button class="btn green" data-go="raid">Raid beaches</button>
+      <button class="btn ghost" data-go="shop">Shop</button>
+    </div>
+    <div class="title-row">
+      <button class="btn small ghost" data-go="cards">Army</button>
+      <button class="btn small ghost" data-go="pass">Tide Pass</button>
+      <button class="btn small ghost" data-go="quests">Today</button>
+    </div>
     <div class="title-row">
       <button class="btn small ghost" id="t-sound" aria-label="Sound">Sound: on</button>
       <button class="btn small ghost" id="t-music" aria-label="Music">Music: on</button>
     </div>
-    <p class="credit">A Jonidge game &middot; prototype</p>
+    <p class="credit">A Jonidge game</p>
   </div>
 </section>
 <section id="scr-map" class="screen" hidden>
   <div class="topbar">
     <button class="iconbtn" data-go="title" aria-label="Back"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7" stroke="#fff" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
-    <div class="wallet"><span class="chip sand"><i class="ico-sand"></i><b class="w-sand">0</b></span><span class="chip pearls"><i class="ico-pearl"></i><b class="w-pearls">0</b></span></div>
-    <button class="btn small blue" data-go="base">Home Beach</button>
+    <div class="wallet" data-wallet></div>
+    <button class="btn small blue" data-go="village">Village</button>
   </div>
+  <div class="world-tabs" id="world-tabs"></div>
   <div class="map-scroll" id="map-scroll"><div class="map-inner" id="map-inner"></div></div>
 </section>
-<section id="scr-base" class="screen" hidden>
+<section id="scr-village" class="screen" hidden>
   <div class="topbar">
-    <button class="iconbtn" data-go="back" aria-label="Back"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7" stroke="#fff" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
-    <div class="wallet"><span class="chip sand"><i class="ico-sand"></i><b class="w-sand">0</b></span><span class="chip pearls"><i class="ico-pearl"></i><b class="w-pearls">0</b></span></div>
-    <button class="btn small orange" data-go="map">Raid!</button>
+    <button class="iconbtn" data-go="title" aria-label="Back"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7" stroke="#fff" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+    <div class="wallet" data-wallet></div>
+    <button class="btn small orange" data-go="raid">Raid</button>
+  </div>
+  <canvas id="village-canvas"></canvas>
+  <p class="v-hint" id="v-hint">Tap a plot to build. Raiders attack from the front (bottom).</p>
+  <div class="v-tray" id="v-tray"></div>
+</section>
+<section id="scr-raid" class="screen" hidden>
+  <div class="topbar">
+    <button class="iconbtn" data-go="title" aria-label="Back"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7" stroke="#fff" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+    <div class="wallet" data-wallet></div>
+    <div class="chip cups" id="r-cups">0</div>
+  </div>
+  <div class="raid-scroll">
+    <div class="raid-head">
+      <h2>Raid beaches</h2>
+      <p id="r-shield">No shield. Other captains may raid your village while you are away.</p>
+      <button class="btn small blue" id="r-refresh">New beaches</button>
+    </div>
+    <div id="r-list" class="opp-list"></div>
+    <h2 class="sec">Defence log</h2>
+    <div id="r-log" class="log-list"></div>
+    <h2 class="sec">Your raids</h2>
+    <div id="r-atk" class="log-list"></div>
+    <p class="shop-note">Beaches are other captains — or clever stand-ins while the shores are quiet. Real online raids need a free backend account later; everything here works offline.</p>
+  </div>
+</section>
+<section id="scr-shop" class="screen" hidden>
+  <div class="topbar">
+    <button class="iconbtn" data-go="title" aria-label="Back"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7" stroke="#fff" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+    <div class="wallet" data-wallet></div>
   </div>
   <div class="base-scroll">
-    <canvas id="base-canvas"></canvas>
-    <h2 class="sec">Upgrade your beach</h2>
-    <div id="upgrades" class="cards"></div>
+    <p class="shop-note">Preview shop — nothing is ever charged. You can never buy troop power. Gems are for cosmetics, the Tide Pass and waiting less.</p>
+    <div id="shop-ads" class="cards"></div>
     <h2 class="sec">Shop</h2>
-    <p class="shop-note">Nothing is for sale yet. These are placeholders. You will never be able to buy troop power.</p>
-    <div id="shop" class="cards"></div>
+    <div id="shop-list" class="cards"></div>
+  </div>
+</section>
+<section id="scr-pass" class="screen" hidden>
+  <div class="topbar">
+    <button class="iconbtn" data-go="title" aria-label="Back"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7" stroke="#fff" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+    <div class="wallet" data-wallet></div>
+  </div>
+  <div class="base-scroll">
+    <div class="pass-head">
+      <h2>Tide Pass</h2>
+      <p id="pass-status">Free track. Premium is a preview and is not charged.</p>
+      <div class="xp"><i id="pass-xpbar" style="width:0%"></i></div>
+    </div>
+    <div id="pass-track" class="pass-track"></div>
+  </div>
+</section>
+<section id="scr-cards" class="screen" hidden>
+  <div class="topbar">
+    <button class="iconbtn" data-go="title" aria-label="Back"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7" stroke="#fff" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+    <div class="wallet" data-wallet></div>
+  </div>
+  <div class="base-scroll">
+    <h2 class="sec">Your army</h2>
+    <p class="shop-note">Win raids to earn card copies. Upgrade with copies and Sand — you cannot buy power with real money.</p>
+    <div id="card-list" class="cards"></div>
+    <h2 class="sec">Beach upgrades</h2>
+    <div id="meta-up" class="cards"></div>
+  </div>
+</section>
+<section id="scr-quests" class="screen" hidden>
+  <div class="topbar">
+    <button class="iconbtn" data-go="title" aria-label="Back"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7" stroke="#fff" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+    <div class="wallet" data-wallet></div>
+  </div>
+  <div class="base-scroll">
+    <h2 class="sec">Login streak</h2>
+    <div id="streak-row" class="streak-row"></div>
+    <h2 class="sec">Daily quests</h2>
+    <div id="quest-list" class="cards"></div>
+    <h2 class="sec">Free chest</h2>
+    <div id="free-chest" class="cards"></div>
   </div>
 </section>
 <div id="modal-root" hidden><div id="modal" class="modal" role="dialog" aria-modal="true"></div></div>
 <div id="toast" role="status"></div>
 <script src="js/data.js"></script>
 <script src="js/engine.js"></script>
+<script src="js/meta.js"></script>
 <script src="js/audio.js"></script>
 <script src="js/ads.js"></script>
 <script src="js/render.js"></script>

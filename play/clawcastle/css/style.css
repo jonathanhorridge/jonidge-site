@@ -129,3 +129,54 @@ button{font-family:inherit;cursor:pointer;border:0}
 .info{font-size:14px;text-align:left}
 #toast{position:fixed;left:50%;top:calc(80px + var(--safe-t));transform:translate(-50%,-20px);z-index:30;background:rgba(40,25,10,.88);color:#fff;font-weight:600;padding:10px 16px;border-radius:14px;opacity:0;transition:.25s;pointer-events:none;max-width:90vw;text-align:center;font-size:15px}
 #toast.on{opacity:1;transform:translate(-50%,0)}
+
+/* v2 screens */
+.player-chip{display:flex;align-items:center;gap:8px;width:100%;background:rgba(255,255,255,.75);border-radius:999px;padding:4px 10px}
+.player-chip .lv{font-family:"Lilita One",sans-serif;font-size:16px;color:#E2531A}
+.player-chip .xp{flex:1;height:8px;background:#E5D3AE;border-radius:99px;overflow:hidden}
+.player-chip .xp i{display:block;height:100%;background:#FF8A2B;border-radius:99px}
+.title-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;width:100%}
+.title-grid .btn{width:100%;padding:0 10px}
+.title-grid .btn.big{grid-column:span 1;font-size:26px;min-height:58px}
+.ico-gem{width:22px;height:22px;border-radius:50%;display:inline-block;background:radial-gradient(circle at 35% 30%,#fff,#7FE7C4 40%,#1FA97A);box-shadow:inset 0 -2px 0 #0E7A55}
+.chip.gems b{color:#0E7A55}
+.chip.cups{background:#FFF3C4;color:#8A5A00}
+.world-tabs{display:flex;gap:6px;padding:8px 10px;overflow-x:auto;background:rgba(31,162,214,.9)}
+.world-tabs button{flex:none;border:0;border-radius:999px;padding:6px 12px;font-family:"Fredoka",sans-serif;font-weight:700;background:rgba(255,255,255,.55);color:#133}
+.world-tabs button.on{background:#fff;color:#E2531A}
+#scr-village{background:#F6D99A;display:flex;flex-direction:column}
+#village-canvas{display:block;width:100%;flex:1;min-height:240px;touch-action:none}
+.v-hint{margin:4px 12px;font-size:13px;font-weight:600;opacity:.8}
+.v-tray{display:flex;gap:8px;overflow-x:auto;padding:8px 10px calc(10px + var(--safe-b));background:rgba(255,248,230,.95);box-shadow:0 -4px 12px rgba(0,0,0,.08)}
+.v-item{flex:none;width:86px;text-align:center;background:#fff;border-radius:14px;padding:6px 4px;box-shadow:0 3px 0 #E9D2A4;font-size:11px;font-weight:700;line-height:1.15}
+.v-item canvas{display:block;margin:0 auto 2px}
+.v-item.on{outline:3px solid #FF8A2B}
+.v-item:disabled{opacity:.45}
+#scr-raid{background:linear-gradient(#36C9EA,#F6D99A 28%)}
+.raid-scroll{flex:1;overflow-y:auto;touch-action:pan-y;padding:8px 12px calc(24px + var(--safe-b));-webkit-overflow-scrolling:touch}
+.raid-head h2{font-family:"Lilita One",sans-serif;font-weight:400;margin:8px 0 4px;color:#7A3A00}
+.raid-head p{margin:0 0 8px;font-weight:600;font-size:14px}
+.opp-list,.log-list{display:flex;flex-direction:column;gap:8px}
+.opp{display:flex;align-items:center;gap:10px;background:#FFF8E6;border-radius:16px;padding:8px;box-shadow:0 3px 0 #D9AE66}
+.opp canvas{width:84px;height:56px;background:#C9EAF7;border-radius:8px;flex:none}
+.opp h3{margin:0;font-size:16px}
+.opp p{margin:0;font-size:13px;opacity:.8}
+.opp .btn{margin-left:auto}
+.log{background:#FFF8E6;border-radius:14px;padding:10px 12px;font-size:14px;font-weight:600;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.log .btn{margin-left:auto}
+.pass-head{padding:8px 16px}
+.pass-head h2{font-family:"Lilita One",sans-serif;font-weight:400;margin:8px 0 4px;color:#7A3A00}
+.pass-head .xp{height:10px;background:#E5D3AE;border-radius:99px;overflow:hidden;margin-top:6px}
+.pass-head .xp i{display:block;height:100%;background:#7C6CFF}
+.pass-track{display:flex;flex-direction:column;gap:8px;padding:0 12px 24px}
+.pass-row{display:grid;grid-template-columns:48px 1fr 1fr;gap:8px;align-items:stretch}
+.pass-row .n{display:grid;place-items:center;font-family:"Lilita One",sans-serif;font-size:20px;color:#7A3A00}
+.pass-cell{background:#FFF8E6;border-radius:14px;padding:8px;font-size:13px;font-weight:700;text-align:center;box-shadow:0 3px 0 #E9D2A4}
+.pass-cell.prem{background:#F3E8FF}
+.pass-cell .btn{min-height:32px;font-size:14px;margin-top:6px;width:100%}
+.streak-row{display:flex;gap:6px;padding:0 12px;overflow-x:auto}
+.streak-day{flex:none;width:64px;background:#FFF8E6;border-radius:14px;padding:8px 4px;text-align:center;font-size:11px;font-weight:700;box-shadow:0 3px 0 #E9D2A4}
+.streak-day.on{outline:3px solid #FF8A2B}
+.streak-day.claimed{background:#D9F5C8}
+.chest-open{font-size:42px;margin:8px 0}
+#scr-shop,#scr-pass,#scr-cards,#scr-quests{background:#F6D99A}

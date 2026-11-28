@@ -31,18 +31,57 @@
     return { id: s.nextId++, t: t, lock: 0 };
   }
 
+  E.castleHp = function (s) {
+    var flag = 0, flagMax = 0, def = 0, defMax = 0, n = 0;
+    s.lanes.forEach(function (l) { l.forEach(function (b) {
+      n++; if (b.k === 'flag') { flag += b.hp; flagMax += b.max; } else { def += b.hp; defMax += b.max; }
+    }); });
+    return { flag: flag, flagMax: flagMax || 1, def: def, defMax: defMax, buildings: n };
+  };
+
+  E.villageToLanes = function (grid, hpx) {
+    hpx = hpx || D.HPX;
+    var lanes = [];
+    for (var c = 0; c < (D.VCOLS || COLS); c++) {
+      var parts = [];
+      for (var r = 0; r < (D.VROWS || 4); r++) {
+        var cell = grid[r] && grid[r][c];
+        if (!cell || cell.deco || !D.BUILD[cell.code]) continue;
+        var def = D.BUILD[cell.code], lv = cell.lv || 1;
+        var hp = Math.round(def.hp * hpx * (1 + 0.3 * (lv - 1)));
+        var b = { k: def.k, code: cell.code, hp: hp, max: hp, cd: def.cd || 0, t: def.cd || 0, lv: lv };
+        parts.push(b);
+      }
+      lanes.push(parts);
+    }
+    return lanes;
+  };
+
   E.newState = function (levelIdx, up, seed) {
-    var L = D.LEVELS[levelIdx];
-    up = up || {};
+    return E.newStateSpec({ level: levelIdx, up: up, seed: seed });
+  };
+  E.newStateSpec = function (opt) {
+    opt = opt || {};
+    var L = opt.level != null ? D.LEVELS[opt.level] : { colors: 5, moves: opt.moves || 20, lanes: opt.laneStr, hpx: opt.hpx };
+    var up = opt.up || {};
     var s = {
-      level: levelIdx, seed: (seed == null ? (levelIdx + 1) * 7919 : seed) | 0, nextId: 1,
-      colors: L.colors, moves: L.moves + (up.harbour || 0), movesMax: L.moves + (up.harbour || 0),
+      level: opt.level == null ? -1 : opt.level, seed: (opt.seed == null ? ((opt.level || 0) + 1) * 7919 : opt.seed) | 0, nextId: 1,
+      colors: opt.colors || L.colors || 5,
+      moves: (opt.moves != null ? opt.moves : L.moves) + (up.harbour || 0),
+      movesMax: (opt.moves != null ? opt.moves : L.moves) + (up.harbour || 0),
       grid: [], lanes: [], troops: [], status: 'play', turn: 0, charge: 0,
+      mode: opt.mode || 'campaign', title: opt.title || (L && L.name) || 'Raid',
       up: { shieldcrab: up.shieldcrab || 1, lobster: up.lobster || 1, eel: up.eel || 1, spinner: up.spinner || 1, puffer: up.puffer || 1, shrine: up.shrine || 0 },
       loot: 0, stats: { troops: 0, cleared: 0, dmg: 0, bombs: 0, riptides: 0, brutes: 0, best: 0 }
     };
-    for (var c = 0; c < COLS; c++) {
-      s.lanes.push(parseLane(L.lanes[c], L.hpx).map(function (b) { b.id = s.nextId++; return b; }));
+    if (opt.lanes) {
+      opt.lanes.forEach(function (lane) {
+        s.lanes.push(lane.map(function (b) { var x = JSON.parse(JSON.stringify(b)); x.id = s.nextId++; return x; }));
+      });
+    } else {
+      for (var c = 0; c < COLS; c++) {
+        s.lanes.push(parseLane((L.lanes && L.lanes[c]) || '', L.hpx).map(function (b) { b.id = s.nextId++; return b; }));
+      }
     }
     for (var r = 0; r < ROWS; r++) {
       s.grid.push([]);
